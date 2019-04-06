@@ -1,14 +1,6 @@
 ﻿# Magic word clears the console
 cls
 
-$numDays = 1
-
-# Gets all one note things
-$onenote = New-Object -ComObject OneNote.Application
-$schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
-[xml]$hierarchy = ""
-$onenote.GetHierarchy("", [Microsoft.Office.InterOp.OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
-
 
 ###################
 # RECTANGLE CLASS #
@@ -122,6 +114,7 @@ class Image {
     [Rectangle]$Rect
     [System.Collections.Generic.List[Ink]]$Inks
     [float]$InkArea
+    [bool]$HasWork
 
     Image([System.Xml.XmlElement]$image) {
         $this.Rect = [Rectangle]::new($image.Position.X, $image.Position.Y, $image.Size.Width, $image.Size.Height)
@@ -132,6 +125,8 @@ class Image {
 
         $this.InkArea = 0;
         $this.Inks.ToArray().ForEach({$this.InkArea += $_.Rect.GetArea()})
+
+        $this.HasWork = $this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant
     }
 
     [string]ToString() {
@@ -139,7 +134,7 @@ class Image {
         $indenter = [Indenter]::new()
 
         $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to evaluate area proportions
-        If ($this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant) {
+        If ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
         $lines.Add($imageDisplay)
@@ -167,12 +162,13 @@ class Image {
 # PAGE CLASS #
 ##############
 class Page {
-    static [int] $dateModifiedThreshold = 1
+    static [int] $dateModifiedThreshold = 2
 
     [string]$Name
     [string]$Tag
     [string]$DateDisplay
     [bool]$Changed
+    [bool]$NeedsGrading
     [System.Collections.Generic.List[Image]]$Images
     [System.Collections.Generic.List[Ink]]$Inks
 
@@ -183,7 +179,6 @@ class Page {
         $this.DateDisplay = $page.lastModifiedTime
         $this.Changed = $false
         if ([datetime]$page.lastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::dateModifiedThreshold)) {
-            $this.DateDisplay += " (!)(changed)"
             $this.Changed = $true
         }
 
@@ -217,13 +212,24 @@ class Page {
         if ($page.name.StartsWith("Quest2-B_answerkey")) { # <-- change this string
             Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
         }
+
+        # Determine if the page has new work
+        $this.NeedsGrading = 
+            ($this.Tag -eq "No tag") -and
+            ($this.Changed -eq $true) -and
+            ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
     }
 
     [string]ToString() {
         $lines = [System.Collections.Generic.List[string]]::new()
         $indenter = [Indenter]::new()
 
-        $lines.Add($this.Name.PadRight(40) + " " + $this.DateDisplay)
+        $statusDisplay = $this.DateDisplay
+        If ($this.NeedsGrading -eq $true) {
+            $statusDisplay += " (!)(needs grading)"
+        }
+
+        $lines.Add($this.Name.PadRight(40) + " " + $statusDisplay)
         $indenter.IncreaseIndent()
 
         # Header print
@@ -245,33 +251,51 @@ class Page {
 }
 
 
-##########################
-# PRINT SECTION FUNCTION #
-##########################
-function Print-Section {
-    param([System.Xml.XmlElement]$section)
+#################
+# SECTION CLASS #
+#################
+class Section {
+    [string]$Name
+    [bool]$Deleted
+    [System.Collections.Generic.List[Page]]$Pages
 
-    [Indenter]$indenter = [Indenter]::new()
-    $indenter.IncreaseIndent()
-    
-    # SECTION HEADER
-    if ($section.isInRecycleBin -eq $true) {
-        $indenter.Print("# Section: " + $section.name + " # (deleted)")
-    } else {
-        $indenter.Print($indent + "# Section: " + $section.name + " #")
+    Section([System.Xml.XmlElement]$section) {
+        $this.Name = $section.Name
+        $this.Deleted = $section.IsInRecycleBin
+
+        $this.Pages = [System.Collections.Generic.List[Page]]::new()
+        foreach ($pageXml in $section.Page) {
+            # We cannot pass a ComObject as a parameter and still have it work, so it is redefined here
+            $onenote = New-Object -ComObject OneNote.Application
+
+            # Get page content
+            [xml]$content = ""
+            $onenote.GetPageContent($pageXml.ID, [ref]$content, [Microsoft.Office.InterOp.OneNote.PageInfo]::piBasic)
+
+            $this.Pages.Add([Page]::new($pageXml, $content))
+        }
     }
 
-    # PAGE
-    $indenter.IncreaseIndent()
-    foreach ($pageXml in $section.Page) {
-        # Finds important content
-        [xml]$content = ""
-        $onenote.GetPageContent($pageXml.ID, [ref]$content, [Microsoft.Office.InterOp.OneNote.PageInfo]::piBasic)
+    [string]ToString() {
+        $lines = [System.Collections.Generic.List[string]]::new()
+        $indenter = [Indenter]::new()
+        
+        # Header print
+        $sectionDisplay = "# Section: " + $this.Name + " #"
+        If ($this.Deleted -eq $true) {
+            $sectionDisplay += " (deleted)"
+        }
+        $lines.Add($sectionDisplay)
 
-        [Page]$page = [Page]::new($pageXml, $content)
-        $indenter.Print($page.ToString())
+        # Page print
+        $indenter.IncreaseIndent()
+        foreach ($page in $this.Pages) {
+            $lines.Add($indenter.Print($page.ToString()))
+        }
+        $indenter.DecreaseIndent()
+
+        return $lines -join "`r`n"
     }
-    $indenter.DecreaseIndent()
 }
 
 
@@ -279,6 +303,13 @@ function Print-Section {
 # MAIN TRAVERSAL #
 ##################
 function Main {
+    # Gets all OneNote things
+    $onenote = New-Object -ComObject OneNote.Application
+    $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
+    [xml]$hierarchy = ""
+    $onenote.GetHierarchy("", [Microsoft.Office.InterOp.OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+
+    # Traverses each notebook and prints each section
     foreach ($notebook in $hierarchy.Notebooks.Notebook) {
         " "
         $notebook.Name
@@ -286,27 +317,21 @@ function Main {
 
         foreach ($sectiongroup in $notebook.SectionGroup) {
             if ($sectiongroup.isInRecycleBin -eq $false) {
-                "### Section Group: " + $sectiongroup.Name + " ###"
-            
-                foreach ($section in $sectiongroup.Section) {
-                    Print-Section $section
+                foreach ($sectionXml in $sectiongroup.Section) {
+                    [Section]$section = [Section]::new($sectionXml)
+                    $section.ToString()
                 }
             }
         }
 
         # Checks for any sections not placed in a sectiongroup
-        $hasMisc = $false
-        foreach ($section in $notebook.Section) {
-            $hasMisc = $hasMisc -or !($section.isInRecycleBin)
-        }
-        if ($hasMisc = $true) {
-            "### Section Group: Miscellaneous ###"
-            foreach ($section in $notebook.Section) {
-                Print-Section $section
-            }
+        foreach ($sectionXml in $notebook.Section) {
+            [Section]$section = [Section]::new($sectionXml)
+            $section.ToString()
         }
     }
 }
+
 
 $str = Main
 Set-Content -Path "OneNote x Powershell\FULLREPORT.txt" -Value $str
