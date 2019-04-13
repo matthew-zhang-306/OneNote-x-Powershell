@@ -1,4 +1,4 @@
-# OneNote x Powershell
+# OneNote-x-Powershell
 
 Purpose 1: Learn Powershell
 

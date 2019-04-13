@@ -195,9 +195,9 @@ class Page {
         # Get tag
         [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
         [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
-        if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {
-            $this.Tag = $tagDefs[0]
-            $this.TagName = $this.Tag.Name
+        if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {=
+            $this.Tag = $tags[0]
+            $this.TagName = $tagDefs[0].Name=
         }
         else {
             $this.TagName = [Page]::DefaultTagName
@@ -206,10 +206,10 @@ class Page {
         # Get dates
         $this.LastModifiedTime = [datetime]$page.lastModifiedTime
         $this.DateDisplay = $page.lastModifiedTime
-        if ($this.TagName -eq [Page]::DefaultTagName) {
-            $this.LastAssignedTime = [datetime]$this.Tag.creationDate
-        } else {
+        if ($this.TagName -eq [Page]::DefaultTagName) {=
             $this.LastAssignedTime = [datetime]$page.dateTime
+        } else {
+            $this.LastAssignedTime = [datetime]$this.Tag.creationDate=
         }
 
         # Finds main page content
@@ -256,7 +256,7 @@ class Page {
         $indenter.IncreaseIndent()
 
         # Header print
-        $lines.Add($indenter.Print($this.Tag))
+        $lines.Add($indenter.Print($this.TagName))
         $lines.Add($indenter.Print([string]$this.Images.Count + " image(s):"))
 
         # Image print
