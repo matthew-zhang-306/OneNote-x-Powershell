@@ -72,6 +72,7 @@ class Indenter {
         ($output -split '\r?\n').ForEach({$lines.Add(($this.Indents -join "") + $_)})
         return $lines -join "`r`n"
     }                                    # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. the inconsistency is weird
+    
 
     IncreaseIndent() {
         $this.IncreaseIndent("    ")
@@ -168,13 +169,21 @@ class Image {
 # PAGE CLASS #
 ##############
 class Page {
-    static [int] $dateModifiedThreshold = 2
+    static [float]$ActiveThreshold = 3.0
+    static [string]$DefaultTagName = "# NoTag #"
 
     [string]$Name
-    [string]$Tag
+    [string]$TagName
+    [XmlElement]$Tag
+
+    [datetime]$LastAssignedTime
+    [datetime]$LastModifiedTime
     [string]$DateDisplay
+
+    [bool]$Active
     [bool]$Changed
-    [bool]$NeedsGrading
+    [bool]$HasWork
+    
     [List[Image]]$Images
     [List[Ink]]$Inks
     [Section]$Section
@@ -183,23 +192,27 @@ class Page {
         $this.Name = $page.Name
         $this.Section = $section
 
-        # Determine if the last modified date is recent enough
-        $this.DateDisplay = $page.lastModifiedTime
-        $this.Changed = $false
-        if ([datetime]$page.lastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::dateModifiedThreshold)) {
-            $this.Changed = $true
-        }
-
-        # Finds content
+        # Get tag
         [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
         [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
         if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {
-            $this.Tag = $tagDefs[0].Name
+            $this.Tag = $tagDefs[0]
+            $this.TagName = $this.Tag.Name
         }
         else {
-            $this.Tag = "No tag"
+            $this.TagName = [Page]::DefaultTagName
         }
 
+        # Get dates
+        $this.LastModifiedTime = [datetime]$page.lastModifiedTime
+        $this.DateDisplay = $page.lastModifiedTime
+        if ($this.TagName -eq [Page]::DefaultTagName) {
+            $this.LastAssignedTime = [datetime]$this.Tag.creationDate
+        } else {
+            $this.LastAssignedTime = [datetime]$page.dateTime
+        }
+
+        # Finds main page content
         $this.Inks = [List[Ink]]::new()
         $content.GetElementsByTagName("one:InkDrawing").ForEach({$this.Inks.Add([Ink]::new($_, $false))})
         $content.GetElementsByTagName("one:InkWord").ForEach({$this.Inks.Add([Ink]::new($_, $true))})
@@ -221,11 +234,10 @@ class Page {
             Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
         }
 
-        # Determine if the page has new work
-        $this.NeedsGrading = 
-            ($this.Tag -eq "No tag") -and
-            ($this.Changed -eq $true) -and
-            ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
+        # Determine the status of the page
+        $this.Active = ($this.LastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::ActiveThreshold))
+        $this.Changed = ($this.LastModifiedTime -gt $this.LastAssignedTime)
+        $this.HasWork = ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
     }
 
     [string]ToString() {
@@ -235,6 +247,9 @@ class Page {
         $statusDisplay = $this.DateDisplay
         If ($this.NeedsGrading -eq $true) {
             $statusDisplay += " (!)(needs grading)"
+        }
+        ElseIf ($this.Changed -eq $true) {
+            $statusDisplay += " (!)(modified)"
         }
 
         $lines.Add($this.Name.PadRight(40) + " " + $statusDisplay)
@@ -280,7 +295,7 @@ class Section {
 
             # Get page content
             [xml]$content = ""
-            $onenote.GetPageContent($pageXml.ID, [ref]$content, [Microsoft.Office.InterOp.OneNote.PageInfo]::piBasic)
+            $onenote.GetPageContent($pageXml.ID, [ref]$content, [OneNote.PageInfo]::piBasic)
 
             $this.Pages.Add([Page]::new($pageXml, $content, $this))
         }
@@ -288,10 +303,7 @@ class Section {
 
     [List[Page]]PagesNeedingGrading() {
         [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-        $this.Pages.Where({$_.NeedsGrading -eq $true}).ForEach({$pagesNeedingGrading.Add($_)})
-        if ($pagesNeedingGrading.Count -gt 0) {
-            
-        }
+        $this.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)}).ForEach({$pagesNeedingGrading.Add($_)})
         return $pagesNeedingGrading
     }
 
