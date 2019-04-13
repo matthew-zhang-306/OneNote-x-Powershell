@@ -195,9 +195,9 @@ class Page {
         # Get tag
         [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
         [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
-        if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {=
+        if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {
             $this.Tag = $tags[0]
-            $this.TagName = $tagDefs[0].Name=
+            $this.TagName = $tagDefs[0].Name
         }
         else {
             $this.TagName = [Page]::DefaultTagName
@@ -206,10 +206,10 @@ class Page {
         # Get dates
         $this.LastModifiedTime = [datetime]$page.lastModifiedTime
         $this.DateDisplay = $page.lastModifiedTime
-        if ($this.TagName -eq [Page]::DefaultTagName) {=
+        if ($this.TagName -eq [Page]::DefaultTagName) {
             $this.LastAssignedTime = [datetime]$page.dateTime
         } else {
-            $this.LastAssignedTime = [datetime]$this.Tag.creationDate=
+            $this.LastAssignedTime = [datetime]$this.Tag.creationDate
         }
 
         # Finds main page content
