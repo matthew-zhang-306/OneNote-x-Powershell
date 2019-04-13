@@ -1,5 +1,11 @@
-﻿# Magic word clears the console
+﻿#Require -Version 5.0
+using namespace Microsoft.Office.InterOp
+using namespace System.Collections.Generic
+using namespace System.Xml
+
+# Magic word clears the console
 cls
+
 
 
 ###################
@@ -55,17 +61,18 @@ class Rectangle {
 # INDENTER UTILITY #
 ####################
 class Indenter {
-    [System.Collections.Generic.List[string]]$Indents
+    [List[string]]$Indents
 
     Indenter() {
-        $this.Indents = [System.Collections.Generic.List[string]]::new()
+        $this.Indents = [List[string]]::new()
     }
 
     [string]Print([string]$output) {
-        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines = [List[string]]::new()
         ($output -split '\r?\n').ForEach({$lines.Add(($this.Indents -join "") + $_)})
         return $lines -join "`r`n"
     }                                    # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. the inconsistency is weird
+    
 
     IncreaseIndent() {
         $this.IncreaseIndent("    ")
@@ -89,7 +96,7 @@ class Ink {
     [Rectangle]$Rect
     [string]$Text
 
-    Ink([System.Xml.XmlElement]$ink, [bool]$isWord) {
+    Ink([XmlElement]$ink, [bool]$isWord) {
         If ($isWord) {
             $this.Rect = [Rectangle]::new(-$ink.inkOriginX, -$ink.inkOriginY, $ink.width, $ink.height)
             $this.Text = $ink.recognizedText
@@ -112,15 +119,15 @@ class Image {
     static [float] $pageFillConstant = 0.005
     
     [Rectangle]$Rect
-    [System.Collections.Generic.List[Ink]]$Inks
+    [List[Ink]]$Inks
     [float]$InkArea
     [bool]$HasWork
 
-    Image([System.Xml.XmlElement]$image) {
+    Image([XmlElement]$image) {
         $this.Rect = [Rectangle]::new($image.Position.X, $image.Position.Y, $image.Size.Width, $image.Size.Height)
     }
 
-    SetInk([System.Collections.Generic.List[Ink]]$theInks) {
+    SetInk([List[Ink]]$theInks) {
         $this.Inks = $theInks
 
         $this.InkArea = 0;
@@ -130,7 +137,7 @@ class Image {
     }
 
     [string]ToString() {
-        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines = [List[string]]::new()
         $indenter = [Indenter]::new()
 
         $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to evaluate area proportions
@@ -162,46 +169,60 @@ class Image {
 # PAGE CLASS #
 ##############
 class Page {
-    static [int] $dateModifiedThreshold = 2
+    static [float]$ActiveThreshold = 3.0
+    static [string]$DefaultTagName = "# NoTag #"
 
     [string]$Name
-    [string]$Tag
+    [string]$TagName
+    [XmlElement]$Tag
+
+    [datetime]$LastAssignedTime
+    [datetime]$LastModifiedTime
     [string]$DateDisplay
+
+    [bool]$Active
     [bool]$Changed
-    [bool]$NeedsGrading
-    [System.Collections.Generic.List[Image]]$Images
-    [System.Collections.Generic.List[Ink]]$Inks
+    [bool]$HasWork
+    
+    [List[Image]]$Images
+    [List[Ink]]$Inks
+    [Section]$Section
 
-    Page([System.Xml.XmlElement]$page, [xml]$content) {
+    Page([XmlElement]$page, [xml]$content, [Section]$section) {
         $this.Name = $page.Name
+        $this.Section = $section
 
-        # Determine if the last modified date is recent enough
-        $this.DateDisplay = $page.lastModifiedTime
-        $this.Changed = $false
-        if ([datetime]$page.lastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::dateModifiedThreshold)) {
-            $this.Changed = $true
-        }
-
-        # Finds content
-        [System.Xml.XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
-        [System.Xml.XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
+        # Get tag
+        [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
+        [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
         if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {
-            $this.Tag = $tagDefs[0].Name
+            $this.Tag = $tags[0]
+            $this.TagName = $tagDefs[0].Name
         }
         else {
-            $this.Tag = "No tag"
+            $this.TagName = [Page]::DefaultTagName
         }
 
-        $this.Inks = [System.Collections.Generic.List[Ink]]::new()
+        # Get dates
+        $this.LastModifiedTime = [datetime]$page.lastModifiedTime
+        $this.DateDisplay = $page.lastModifiedTime
+        if ($this.TagName -eq [Page]::DefaultTagName) {
+            $this.LastAssignedTime = [datetime]$page.dateTime
+        } else {
+            $this.LastAssignedTime = [datetime]$this.Tag.creationDate
+        }
+
+        # Finds main page content
+        $this.Inks = [List[Ink]]::new()
         $content.GetElementsByTagName("one:InkDrawing").ForEach({$this.Inks.Add([Ink]::new($_, $false))})
         $content.GetElementsByTagName("one:InkWord").ForEach({$this.Inks.Add([Ink]::new($_, $true))})
 
-        $this.Images = [System.Collections.Generic.List[Image]]::new()
+        $this.Images = [List[Image]]::new()
         $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}.ForEach({
             $theImage = [Image]::new($_)
 
             # Get contained inks
-            $theInks = [System.Collections.Generic.List[Ink]]::new()
+            $theInks = [List[Ink]]::new()
             $this.Inks.ToArray().ForEach({If ($_.Rect.Intersects($theImage.Rect)) { $theInks.Add($_) }})
             $theImage.SetInk($theInks)
             
@@ -213,27 +234,29 @@ class Page {
             Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
         }
 
-        # Determine if the page has new work
-        $this.NeedsGrading = 
-            ($this.Tag -eq "No tag") -and
-            ($this.Changed -eq $true) -and
-            ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
+        # Determine the status of the page
+        $this.Active = ($this.LastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::ActiveThreshold))
+        $this.Changed = ($this.LastModifiedTime -gt $this.LastAssignedTime)
+        $this.HasWork = ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
     }
 
     [string]ToString() {
-        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines = [List[string]]::new()
         $indenter = [Indenter]::new()
 
         $statusDisplay = $this.DateDisplay
         If ($this.NeedsGrading -eq $true) {
             $statusDisplay += " (!)(needs grading)"
         }
+        ElseIf ($this.Changed -eq $true) {
+            $statusDisplay += " (!)(modified)"
+        }
 
         $lines.Add($this.Name.PadRight(40) + " " + $statusDisplay)
         $indenter.IncreaseIndent()
 
         # Header print
-        $lines.Add($indenter.Print($this.Tag))
+        $lines.Add($indenter.Print($this.TagName))
         $lines.Add($indenter.Print([string]$this.Images.Count + " image(s):"))
 
         # Image print
@@ -257,27 +280,35 @@ class Page {
 class Section {
     [string]$Name
     [bool]$Deleted
-    [System.Collections.Generic.List[Page]]$Pages
+    [List[Page]]$Pages
+    [string]$NotebookName
 
-    Section([System.Xml.XmlElement]$section) {
+    Section([XmlElement]$section, [string]$notebook) {
         $this.Name = $section.Name
         $this.Deleted = $section.IsInRecycleBin
+        $this.NotebookName = $notebook
 
-        $this.Pages = [System.Collections.Generic.List[Page]]::new()
+        $this.Pages = [List[Page]]::new()
         foreach ($pageXml in $section.Page) {
             # We cannot pass a ComObject as a parameter and still have it work, so it is redefined here
             $onenote = New-Object -ComObject OneNote.Application
 
             # Get page content
             [xml]$content = ""
-            $onenote.GetPageContent($pageXml.ID, [ref]$content, [Microsoft.Office.InterOp.OneNote.PageInfo]::piBasic)
+            $onenote.GetPageContent($pageXml.ID, [ref]$content, [OneNote.PageInfo]::piBasic)
 
-            $this.Pages.Add([Page]::new($pageXml, $content))
+            $this.Pages.Add([Page]::new($pageXml, $content, $this))
         }
     }
 
+    [List[Page]]PagesNeedingGrading() {
+        [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
+        $this.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)}).ForEach({$pagesNeedingGrading.Add($_)})
+        return $pagesNeedingGrading
+    }
+
     [string]ToString() {
-        $lines = [System.Collections.Generic.List[string]]::new()
+        $lines = [List[string]]::new()
         $indenter = [Indenter]::new()
         
         # Header print
@@ -307,7 +338,9 @@ function Main {
     $onenote = New-Object -ComObject OneNote.Application
     $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
     [xml]$hierarchy = ""
-    $onenote.GetHierarchy("", [Microsoft.Office.InterOp.OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+    $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+
+    [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
 
     # Traverses each notebook and prints each section
     foreach ($notebook in $hierarchy.Notebooks.Notebook) {
@@ -315,20 +348,36 @@ function Main {
         $notebook.Name
         "-----------------"
 
+        [List[XmlElement]]$sectionXmls = [List[XmlElement]]::new()
+        # Checks for all sections placed in a sectiongroup
         foreach ($sectiongroup in $notebook.SectionGroup) {
             if ($sectiongroup.isInRecycleBin -eq $false) {
                 foreach ($sectionXml in $sectiongroup.Section) {
-                    [Section]$section = [Section]::new($sectionXml)
-                    $section.ToString()
+                    $sectionXmls.Add($sectionXml)
                 }
             }
         }
-
         # Checks for any sections not placed in a sectiongroup
         foreach ($sectionXml in $notebook.Section) {
-            [Section]$section = [Section]::new($sectionXml)
-            $section.ToString()
+            $sectionXmls.Add($sectionXml)
         }
+
+        # Goes through each section and obtains / prints relevant information
+        foreach ($sectionXml in $sectionXmls) {
+            [Section]$section = [Section]::new($sectionXml, $notebook.Name)
+            $section.ToString()
+
+            [List[Page]]$thePagesNeedingGrading = $section.PagesNeedingGrading();
+            foreach ($pageNeedingGrading in $thePagesNeedingGrading) {
+                $pagesNeedingGrading.Add($pageNeedingGrading)
+            }
+        }
+    }
+
+    " "
+    $pagesNeedingGrading.Count.ToString() + " need grading"
+    foreach ($page in $pagesNeedingGrading) {
+        "PAGE: " + $page.Section.NotebookName + " " + $page.Section.Name + " " + $page.Name
     }
 }
 
