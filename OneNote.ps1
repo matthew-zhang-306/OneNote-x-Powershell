@@ -62,17 +62,27 @@ class Rectangle {
 ####################
 class Indenter {
     [List[string]]$Indents
+    [List[string]]$Lines
 
     Indenter() {
         $this.Indents = [List[string]]::new()
+        $this.ClearLines()
     }
 
-    [string]Print([string]$output) {
-        $lines = [List[string]]::new()
-        ($output -split '\r?\n').ForEach({$lines.Add(($this.Indents -join "") + $_)})
-        return $lines -join "`r`n"
-    }                                    # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. the inconsistency is weird
-    
+    [string]Print() {
+        return $this.Print($this.Lines)
+    }
+    [string]Print([string]$outputRaw) {
+        $output = [List[string]]::new()
+        foreach ($line in ($outputRaw -split '\r?\n')) {
+            $output.Add($this.GetCurrentIndent() + $line)
+        }
+        return $this.Print($output)
+    }
+    [string]Print([List[string]]$output) {
+        # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. the inconsistency is weird
+        return $output -join "`r`n"
+    }
 
     IncreaseIndent() {
         $this.IncreaseIndent("    ")
@@ -86,6 +96,24 @@ class Indenter {
             $this.Indents.RemoveAt($this.Indents.Count - 1)
         }
     }
+
+    [string]GetCurrentIndent() {
+        return $this.Indents -join ""
+    }
+
+
+    AddLine([string]$line) {
+        $this.AddLines($line -split '\r?\n')
+    }
+    AddLines([List[string]]$lines) {
+        foreach($line in $lines) {
+            $this.Lines.Add($this.GetCurrentIndent() + $line)
+        }
+    }
+
+    ClearLines() {
+        $this.Lines = [List[string]]::new()
+    }
 }
 
 
@@ -93,21 +121,25 @@ class Indenter {
 # INK CLASS #
 ############# (because OneNote is too fancy)
 class Ink {
+    static [bool]$Debug = $false
+
     [Rectangle]$Rect
     [string]$Text
 
     Ink([XmlElement]$ink, [bool]$isWord) {
         If ($isWord) {
             $this.Rect = [Rectangle]::new(-$ink.inkOriginX, -$ink.inkOriginY, $ink.width, $ink.height)
-            $this.Text = $ink.recognizedText
+            $this.Text = "[Text]: " + $ink.recognizedText
         } Else {
             $this.Rect = [Rectangle]::new($ink.Position.X, $ink.Position.Y, $ink.Size.Width, $ink.Size.Height)
-            $this.Text = ""
+            $this.Text = "[Drawing]"
         }
     }
 
     [string]ToString() {
-        return $this.Text + $(If ($this.Text.Length -gt 0) { " " } Else { "" }) + $this.Rect.ToString()
+        return $this.Text +
+            $(If ($this.Text.Length -gt 0) { " " } Else { "" }) +
+            $(If ([Ink]::Debug) { $this.Rect.ToString() } Else { "" })
     }
 }
 
@@ -131,36 +163,37 @@ class Image {
         $this.Inks = $theInks
 
         $this.InkArea = 0;
-        $this.Inks.ToArray().ForEach({$this.InkArea += $_.Rect.GetArea()})
+        foreach ($ink in $this.Inks.ToArray()) {
+            $this.InkArea += $ink.Rect.GetArea()
+        }
 
         $this.HasWork = $this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant
     }
 
-    [string]ToString() {
-        $lines = [List[string]]::new()
+    [string]FullReport() {
         $indenter = [Indenter]::new()
 
         $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to evaluate area proportions
         If ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
-        $lines.Add($imageDisplay)
+        $indenter.AddLine($imageDisplay)
             
         if ($this.Inks.Count -gt 0) {
             # INK HEADER
-            $lines.Add([string]$this.Inks.Count + " inks:")
+            $indenter.AddLine([string]$this.Inks.Count + " inks:")
 
             # Ink print
             $inkIndex = 1
             $indenter.IncreaseIndent("|   ")
             foreach ($ink in $this.Inks) {
-                $lines.Add($indenter.Print([string]$inkIndex + ") " + $ink.ToString()))
+                $indenter.AddLine([string]$inkIndex + ") " + $ink.ToString())
                 $inkIndex += 1
             }
             $indenter.DecreaseIndent()
         }
         
-        return $lines -join "`r`n"
+        return $indenter.Print()
     }
 }
 
@@ -214,20 +247,28 @@ class Page {
 
         # Finds main page content
         $this.Inks = [List[Ink]]::new()
-        $content.GetElementsByTagName("one:InkDrawing").ForEach({$this.Inks.Add([Ink]::new($_, $false))})
-        $content.GetElementsByTagName("one:InkWord").ForEach({$this.Inks.Add([Ink]::new($_, $true))})
+        foreach ($ink in $content.GetElementsByTagName("one:InkDrawing")) {
+            $this.Inks.Add([Ink]::new($ink, $false))
+        }
+        foreach ($ink in $content.GetElementsByTagName("one:InkWord")) {
+            $this.Inks.Add([Ink]::new($ink, $true))
+        }
 
         $this.Images = [List[Image]]::new()
-        $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}.ForEach({
-            $theImage = [Image]::new($_)
+        foreach ($image in $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}) {
+            $theImage = [Image]::new($image)
 
             # Get contained inks
             $theInks = [List[Ink]]::new()
-            $this.Inks.ToArray().ForEach({If ($_.Rect.Intersects($theImage.Rect)) { $theInks.Add($_) }})
+            foreach ($ink in $this.Inks.ToArray()) {
+                If ($ink.Rect.Intersects($theImage.Rect)) {
+                    $theInks.Add($ink)
+                }
+            }
             $theImage.SetInk($theInks)
             
             $this.Images.Add($theImage)
-        })
+        }
 
         # Debug log full XML
         if ($page.name.StartsWith("Quest2-B_answerkey")) { # <-- change this string
@@ -240,8 +281,7 @@ class Page {
         $this.HasWork = ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
     }
 
-    [string]ToString() {
-        $lines = [List[string]]::new()
+    [string]FullReport() {
         $indenter = [Indenter]::new()
 
         $statusDisplay = $this.DateDisplay
@@ -252,24 +292,24 @@ class Page {
             $statusDisplay += " (!)(modified)"
         }
 
-        $lines.Add($this.Name.PadRight(40) + " " + $statusDisplay)
+        $indenter.AddLine($this.Name.PadRight(40) + " " + $statusDisplay)
         $indenter.IncreaseIndent()
 
         # Header print
-        $lines.Add($indenter.Print($this.TagName))
-        $lines.Add($indenter.Print([string]$this.Images.Count + " image(s):"))
+        $indenter.AddLine($this.TagName)
+        $indenter.AddLine([string]$this.Images.Count + " image(s):")
 
         # Image print
         $imageIndex = 1
         $indenter.IncreaseIndent("|   ")
         foreach ($image in $this.Images) {
-            $lines.Add($indenter.Print([string]$imageIndex + ") " + $image.ToString()))
+            $indenter.AddLine([string]$imageIndex + ") " + $image.FullReport())
             $imageIndex += 1
         }
         $indenter.DecreaseIndent()
 
         $indenter.DecreaseIndent()
-        return $lines -join "`r`n"
+        return $indenter.Print()
     }
 }
 
@@ -281,12 +321,12 @@ class Section {
     [string]$Name
     [bool]$Deleted
     [List[Page]]$Pages
-    [string]$NotebookName
+    [Notebook]$Notebook
 
-    Section([XmlElement]$section, [string]$notebook) {
+    Section([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
         $this.Deleted = $section.IsInRecycleBin
-        $this.NotebookName = $notebook
+        $this.Notebook = $notebook
 
         $this.Pages = [List[Page]]::new()
         foreach ($pageXml in $section.Page) {
@@ -303,12 +343,21 @@ class Section {
 
     [List[Page]]PagesNeedingGrading() {
         [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-        $this.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)}).ForEach({$pagesNeedingGrading.Add($_)})
+        foreach ($page in $this.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)})) {
+            $pagesNeedingGrading.Add($page)
+        }
         return $pagesNeedingGrading
     }
 
-    [string]ToString() {
-        $lines = [List[string]]::new()
+    [List[Page]]PagesInactive() {
+        [List[Page]]$pagesInactive = [List[Page]]::new()
+        foreach ($page in $this.Pages.Where({$_.Active -eq $false})) {
+            $pagesInactive.Add($page)
+        }
+        return $pagesInactive
+    }
+
+    [string]FullReport() {
         $indenter = [Indenter]::new()
         
         # Header print
@@ -316,37 +365,31 @@ class Section {
         If ($this.Deleted -eq $true) {
             $sectionDisplay += " (deleted)"
         }
-        $lines.Add($sectionDisplay)
+        $indenter.AddLine($sectionDisplay)
 
         # Page print
         $indenter.IncreaseIndent()
         foreach ($page in $this.Pages) {
-            $lines.Add($indenter.Print($page.ToString()))
+            $indenter.AddLine($page.FullReport())
         }
         $indenter.DecreaseIndent()
 
-        return $lines -join "`r`n"
+        return $indenter.Print()
     }
 }
 
 
 ##################
-# MAIN TRAVERSAL #
+# NOTEBOOK CLASS #
 ##################
-function Main {
-    # Gets all OneNote things
-    $onenote = New-Object -ComObject OneNote.Application
-    $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
-    [xml]$hierarchy = ""
-    $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+class Notebook {
+    [string]$Name
+    [bool]$Deleted
+    [List[Section]]$Sections
 
-    [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-
-    # Traverses each notebook and prints each section
-    foreach ($notebook in $hierarchy.Notebooks.Notebook) {
-        " "
-        $notebook.Name
-        "-----------------"
+    Notebook([XmlElement]$notebook) {
+        $this.Name = $notebook.Name
+        $this.Deleted = $notebook.IsInRecycleBin
 
         [List[XmlElement]]$sectionXmls = [List[XmlElement]]::new()
         # Checks for all sections placed in a sectiongroup
@@ -362,23 +405,94 @@ function Main {
             $sectionXmls.Add($sectionXml)
         }
 
-        # Goes through each section and obtains / prints relevant information
+        # Goes through all the xml pieces and makes section objects
+        $this.Sections = [List[Section]]::new()
         foreach ($sectionXml in $sectionXmls) {
-            [Section]$section = [Section]::new($sectionXml, $notebook.Name)
-            $section.ToString()
-
-            [List[Page]]$thePagesNeedingGrading = $section.PagesNeedingGrading();
-            foreach ($pageNeedingGrading in $thePagesNeedingGrading) {
-                $pagesNeedingGrading.Add($pageNeedingGrading)
-            }
+            $this.Sections.Add([Section]::new($sectionXml, $this))
         }
     }
 
+    [List[Page]]PagesNeedingGrading() {
+        [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
+        foreach ($section in $this.Sections) {
+            [List[Page]]$thePages = $section.PagesNeedingGrading()
+            foreach ($page in $thePages) {
+                $pagesNeedingGrading.Add($page)
+            }
+        }
+        return $pagesNeedingGrading
+    }
+
+    [List[Page]]PagesInactive() {
+        [List[Page]]$pagesInactive = [List[Page]]::new()
+        foreach ($section in $this.Sections) {
+            [List[Page]]$thePages = $section.PagesInactive()
+            foreach ($page in $thePages) {
+                $pagesInactive.Add($page)
+            }
+        }
+        return $pagesInactive
+    }
+
+    [string]FullReport() {
+        $indenter = [Indenter]::new()
+
+        $indenter.AddLine(" ")
+        $indenter.AddLine($this.Name)
+        $indenter.AddLine("-------------------")
+
+        foreach ($section in $this.Sections) {
+            $indenter.AddLine($section.FullReport())
+        }
+
+        return $indenter.Print()
+    }
+}
+
+
+
+##################
+# MAIN TRAVERSAL #
+##################
+function Main {
+    # Gets all OneNote things
+    $onenote = New-Object -ComObject OneNote.Application
+    $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
+    [xml]$hierarchy = ""
+    $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+
+    [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
+    [List[Page]]$pagesInactive = [List[Page]]::new()
+
+    # Traverses each notebook and prints each section
+    foreach ($notebookXml in $hierarchy.Notebooks.Notebook) {
+        [Notebook]$notebook = [Notebook]::new($notebookXml)
+        $notebook.FullReport()
+
+        # Get special pages for the full list
+        [List[Page]]$thePages = $notebook.PagesNeedingGrading();
+        foreach ($thePage in $thePages) {
+            $pagesNeedingGrading.Add($thePage)
+        }
+        $thePages = $notebook.PagesInactive();
+        foreach ($thePage in $thePages) {
+            $pagesInactive.Add($thePage)
+        }
+    }
+
+    
     " "
     $pagesNeedingGrading.Count.ToString() + " need grading"
     foreach ($page in $pagesNeedingGrading) {
-        "PAGE: " + $page.Section.NotebookName + " " + $page.Section.Name + " " + $page.Name
+        "PAGE: " + $page.Section.Notebook.Name + " " + $page.Section.Name + " " + $page.Name
     }
+
+    " "
+    $pagesInactive.Count.ToString() + " inactive pages"
+    foreach ($page in $pagesInactive) {
+        "PAGE: " + $page.Section.Notebook.Name + " " + $page.Section.Name + " " + $page.Name
+    }
+    
 }
 
 
