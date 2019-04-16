@@ -311,6 +311,10 @@ class Page {
         $indenter.DecreaseIndent()
         return $indenter.Print()
     }
+
+    [string]ToString() {
+        return "PAGE: " + $this.Section.Notebook.Name.PadRight(40) + " | " + $this.Section.Name.PadRight(40) + " | " + $this.Name
+    }
 }
 
 
@@ -339,22 +343,6 @@ class Section {
 
             $this.Pages.Add([Page]::new($pageXml, $content, $this))
         }
-    }
-
-    [List[Page]]PagesNeedingGrading() {
-        [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-        foreach ($page in $this.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)})) {
-            $pagesNeedingGrading.Add($page)
-        }
-        return $pagesNeedingGrading
-    }
-
-    [List[Page]]PagesInactive() {
-        [List[Page]]$pagesInactive = [List[Page]]::new()
-        foreach ($page in $this.Pages.Where({$_.Active -eq $false})) {
-            $pagesInactive.Add($page)
-        }
-        return $pagesInactive
     }
 
     [string]FullReport() {
@@ -412,26 +400,34 @@ class Notebook {
         }
     }
 
-    [List[Page]]PagesNeedingGrading() {
+    [List[Page]]GetUngradedPages() {
         [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
         foreach ($section in $this.Sections) {
-            [List[Page]]$thePages = $section.PagesNeedingGrading()
-            foreach ($page in $thePages) {
+            foreach ($page in $section.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)})) {
                 $pagesNeedingGrading.Add($page)
             }
         }
         return $pagesNeedingGrading
     }
 
-    [List[Page]]PagesInactive() {
+    [List[Page]]GetInactivePages() {
         [List[Page]]$pagesInactive = [List[Page]]::new()
         foreach ($section in $this.Sections) {
-            [List[Page]]$thePages = $section.PagesInactive()
-            foreach ($page in $thePages) {
+            foreach ($page in $section.Pages.Where({$_.Active -eq $false})) {
                 $pagesInactive.Add($page)
             }
         }
         return $pagesInactive
+    }
+
+    [List[Page]]GetEmptyPages() {
+        [List[Page]]$pagesEmpty = [List[Page]]::new()
+        foreach ($section in $this.Sections) {
+            foreach ($page in $section.Pages.Where({$_.Images.Count -eq 0})) {
+                $pagesEmpty.Add($page)
+            }
+        }
+        return $pagesEmpty
     }
 
     [string]FullReport() {
@@ -461,36 +457,48 @@ function Main {
     [xml]$hierarchy = ""
     $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
 
-    [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-    [List[Page]]$pagesInactive = [List[Page]]::new()
+    [List[Page]]$ungradedPages = [List[Page]]::new()
+    [List[Page]]$inactivePages = [List[Page]]::new()
+    [List[Page]]$emptyPages = [List[Page]]::new()
 
     # Traverses each notebook and prints each section
     foreach ($notebookXml in $hierarchy.Notebooks.Notebook) {
+        if ($notebookXml.Name.Contains("QuestLearning's")) {
+            continue
+        }
+
         [Notebook]$notebook = [Notebook]::new($notebookXml)
         $notebook.FullReport()
 
         # Get special pages for the full list
-        [List[Page]]$thePages = $notebook.PagesNeedingGrading();
-        foreach ($thePage in $thePages) {
-            $pagesNeedingGrading.Add($thePage)
+        foreach ($page in $notebook.GetUngradedPages()) {
+            $ungradedPages.Add($page)
         }
-        $thePages = $notebook.PagesInactive();
-        foreach ($thePage in $thePages) {
-            $pagesInactive.Add($thePage)
+        foreach ($page in $notebook.GetInactivePages()) {
+            $inactivePages.Add($page)
+        }
+        foreach ($page in $notebook.GetEmptyPages()) {
+            $emptyPages.Add($page)
         }
     }
 
     
     " "
-    $pagesNeedingGrading.Count.ToString() + " need grading"
-    foreach ($page in $pagesNeedingGrading) {
-        "PAGE: " + $page.Section.Notebook.Name + " " + $page.Section.Name + " " + $page.Name
+    $ungradedPages.Count.ToString() + " ungraded pages"
+    foreach ($page in $ungradedPages) {
+        $page.ToString()
     }
 
     " "
-    $pagesInactive.Count.ToString() + " inactive pages"
-    foreach ($page in $pagesInactive) {
-        "PAGE: " + $page.Section.Notebook.Name + " " + $page.Section.Name + " " + $page.Name
+    $inactivePages.Count.ToString() + " inactive pages"
+    foreach ($page in $inactivePages) {
+        $page.ToString()
+    }
+
+    " "
+    $emptyPages.Count.ToString() + " empty pages"
+    foreach ($page in $emptyPages) {
+        $page.ToString()
     }
     
 }
