@@ -1,5 +1,5 @@
 ﻿#Require -Version 5.0
-using namespace Microsoft.Office.InterOp
+using namespace Microsoft.Office.Interop
 using namespace System.Collections.Generic
 using namespace System.Xml
 
@@ -111,6 +111,13 @@ class Indenter {
         }
     }
 
+    # Note: + operator mutates the input!
+    static [Indenter]op_Addition([Indenter]$first, [string]$second) {
+        $first.AddLine($second)
+        return $first
+    }
+
+
     ClearLines() {
         $this.Lines = [List[string]]::new()
     }
@@ -177,7 +184,7 @@ class Image {
         If ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
-        $indenter.AddLine($imageDisplay)
+        $indenter += $imageDisplay
             
         if ($this.Inks.Count -gt 0) {
             # INK HEADER
@@ -187,7 +194,7 @@ class Image {
             $inkIndex = 1
             $indenter.IncreaseIndent("|   ")
             foreach ($ink in $this.Inks) {
-                $indenter.AddLine([string]$inkIndex + ") " + $ink.ToString())
+                $indenter += [string]$inkIndex + ") " + $ink.ToString()
                 $inkIndex += 1
             }
             $indenter.DecreaseIndent()
@@ -292,18 +299,18 @@ class Page {
             $statusDisplay += " (!)(modified)"
         }
 
-        $indenter.AddLine($this.Name.PadRight(40) + " " + $statusDisplay)
+        $indenter += $this.Name.PadRight(40) + " " + $statusDisplay
         $indenter.IncreaseIndent()
 
         # Header print
-        $indenter.AddLine($this.TagName)
-        $indenter.AddLine([string]$this.Images.Count + " image(s):")
+        $indenter += $this.TagName
+        $indenter += [string]$this.Images.Count + " image(s):"
 
         # Image print
         $imageIndex = 1
         $indenter.IncreaseIndent("|   ")
         foreach ($image in $this.Images) {
-            $indenter.AddLine([string]$imageIndex + ") " + $image.FullReport())
+            $indenter += [string]$imageIndex + ") " + $image.FullReport()
             $imageIndex += 1
         }
         $indenter.DecreaseIndent()
@@ -353,12 +360,12 @@ class Section {
         If ($this.Deleted -eq $true) {
             $sectionDisplay += " (deleted)"
         }
-        $indenter.AddLine($sectionDisplay)
+        $indenter += $sectionDisplay
 
         # Page print
         $indenter.IncreaseIndent()
         foreach ($page in $this.Pages) {
-            $indenter.AddLine($page.FullReport())
+            $indenter += $page.FullReport()
         }
         $indenter.DecreaseIndent()
 
@@ -433,12 +440,12 @@ class Notebook {
     [string]FullReport() {
         $indenter = [Indenter]::new()
 
-        $indenter.AddLine(" ")
-        $indenter.AddLine($this.Name)
-        $indenter.AddLine("-------------------")
+        $indenter += " "
+        $indenter += $this.Name
+        $indenter += "-------------------"
 
         foreach ($section in $this.Sections) {
-            $indenter.AddLine($section.FullReport())
+            $indenter += $section.FullReport()
         }
 
         return $indenter.Print()
@@ -447,63 +454,90 @@ class Notebook {
 
 
 
-##################
-# MAIN TRAVERSAL #
-##################
-function Main {
-    # Gets all OneNote things
-    $onenote = New-Object -ComObject OneNote.Application
-    $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
-    [xml]$hierarchy = ""
-    $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
+##############
+# MAIN CLASS #
+##############
+class Main {
+    [List[Notebook]]$Notebooks
 
-    [List[Page]]$ungradedPages = [List[Page]]::new()
-    [List[Page]]$inactivePages = [List[Page]]::new()
-    [List[Page]]$emptyPages = [List[Page]]::new()
+    Main() {
+        $this.Notebooks = [List[Notebook]]::new()
 
-    # Traverses each notebook and prints each section
-    foreach ($notebookXml in $hierarchy.Notebooks.Notebook) {
-        if ($notebookXml.Name.Contains("QuestLearning's")) {
-            continue
-        }
+        # Gets all OneNote things
+        $onenote = New-Object -ComObject OneNote.Application
+        $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
+        [xml]$hierarchy = ""
+        $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
 
-        [Notebook]$notebook = [Notebook]::new($notebookXml)
-        $notebook.FullReport()
+        foreach ($notebookXml in $hierarchy.Notebooks.Notebook) {
+            # Exclude the admin notebook
+            if ($notebookXml.Name.Contains("QuestLearning's")) {
+                continue
+            }
 
-        # Get special pages for the full list
-        foreach ($page in $notebook.GetUngradedPages()) {
-            $ungradedPages.Add($page)
-        }
-        foreach ($page in $notebook.GetInactivePages()) {
-            $inactivePages.Add($page)
-        }
-        foreach ($page in $notebook.GetEmptyPages()) {
-            $emptyPages.Add($page)
+            $this.Notebooks.Add([Notebook]::new($notebookXml))
         }
     }
 
-    
-    " "
-    $ungradedPages.Count.ToString() + " ungraded pages"
-    foreach ($page in $ungradedPages) {
-        $page.ToString()
+    [string]FullReport() {
+        [Indenter]$indenter = [Indenter]::new()
+
+        # Prints each notebook in the list
+        foreach ($notebook in $this.Notebooks) {
+            $indenter += $notebook.FullReport()
+        }
+
+        $str = $indenter.Print()
+        Set-Content -Path "OneNote x Powershell\FULLREPORT.txt" -Value $str
+        return $str
     }
 
-    " "
-    $inactivePages.Count.ToString() + " inactive pages"
-    foreach ($page in $inactivePages) {
-        $page.ToString()
-    }
+    [string]StatusReports() {
+        [Indenter]$indenter = [Indenter]::new()
 
-    " "
-    $emptyPages.Count.ToString() + " empty pages"
-    foreach ($page in $emptyPages) {
-        $page.ToString()
+        [List[Page]]$ungradedPages = [List[Page]]::new()
+        [List[Page]]$inactivePages = [List[Page]]::new()
+        [List[Page]]$emptyPages = [List[Page]]::new()
+
+        # Get special pages in the full list
+        foreach ($notebook in $this.Notebooks) {
+            foreach ($page in $notebook.GetUngradedPages()) {
+                $ungradedPages.Add($page)
+            }
+            foreach ($page in $notebook.GetInactivePages()) {
+                $inactivePages.Add($page)
+            }
+            foreach ($page in $notebook.GetEmptyPages()) {
+                $emptyPages.Add($page)
+            }
+        }
+
+        $indenter += $ungradedPages.Count.ToString() + " ungraded pages"
+        foreach ($page in $ungradedPages) {
+            $indenter += $page.ToString()
+        }
+
+        $indenter += " "
+        $indenter += $inactivePages.Count.ToString() + " inactive pages"
+        foreach ($page in $inactivePages) {
+            $indenter += $page.ToString()
+        }
+
+        $indenter += " "
+        $indenter += $emptyPages.Count.ToString() + " empty pages"
+        foreach ($page in $emptyPages) {
+            $indenter += $page.ToString()
+        }
+
+        $str = $indenter.Print()
+        Set-Content -Path "OneNote x Powershell\STATUSREPORT.txt" -Value $str
+        return $str
     }
     
 }
 
 
-$str = Main
-Set-Content -Path "OneNote x Powershell\FULLREPORT.txt" -Value $str
-$str
+[Main]$main = [Main]::new()
+$main.FullReport()
+" "
+$main.StatusReports()
