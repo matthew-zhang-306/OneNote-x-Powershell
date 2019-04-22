@@ -7,6 +7,10 @@ using namespace System.Xml
 cls
 
 
+# If Powershell for some reason doesn't recognize OneNote classes, type this into the console to magically fix it
+# Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
+
+
 
 ###################
 # RECTANGLE CLASS #
@@ -407,34 +411,29 @@ class Notebook {
         }
     }
 
+    [List[Page]]GetPagesWhere([Func[Page,bool]]$func) {
+        [List[Page]]$pages = [List[Page]]::new()
+        foreach ($section in $this.Sections) {
+            foreach ($page in $section.Pages) {
+                if ($func.Invoke($page)) {
+                    $pages.Add($page)
+                }
+            }
+        }
+        return $pages
+    }
+
     [List[Page]]GetUngradedPages() {
-        [List[Page]]$pagesNeedingGrading = [List[Page]]::new()
-        foreach ($section in $this.Sections) {
-            foreach ($page in $section.Pages.Where({($_.Changed -eq $true) -and ($_.HasWork -eq $true)})) {
-                $pagesNeedingGrading.Add($page)
-            }
-        }
-        return $pagesNeedingGrading
+        return $this.GetPagesWhere({param([Page]$p) ($p.Changed -eq $true) -and ($p.HasWork -eq $true)})
     }
-
     [List[Page]]GetInactivePages() {
-        [List[Page]]$pagesInactive = [List[Page]]::new()
-        foreach ($section in $this.Sections) {
-            foreach ($page in $section.Pages.Where({$_.Active -eq $false})) {
-                $pagesInactive.Add($page)
-            }
-        }
-        return $pagesInactive
+        return $this.GetPagesWhere({param([Page]$p) $p.Active -eq $false})
     }
-
     [List[Page]]GetEmptyPages() {
-        [List[Page]]$pagesEmpty = [List[Page]]::new()
-        foreach ($section in $this.Sections) {
-            foreach ($page in $section.Pages.Where({$_.Images.Count -eq 0})) {
-                $pagesEmpty.Add($page)
-            }
-        }
-        return $pagesEmpty
+        return $this.GetPagesWhere({param([Page]$p) $p.Images.Count -eq 0})
+    }
+    [List[Page]]GetUnreviewedPages() {
+        return $this.GetPagesWhere({param([Page]$p) $p.TagName -like "*REVIEW*"})
     }
 
     [string]FullReport() {
@@ -492,42 +491,35 @@ class Main {
         return $str
     }
 
+    [string]StatusReport([Func[Notebook,List[Page]]]$func, [string]$name) {
+        [Indenter]$indenter = [Indenter]::new()
+        [List[Page]]$pages = [List[Page]]::new()
+
+        foreach ($notebook in $this.Notebooks) {
+            [List[Page]]$list = $func.Invoke($notebook)
+            if ($list -eq $null) {
+                # Debug here because to be honest it really should not be null
+            } else {
+                $pages.AddRange($func.Invoke($notebook))
+            }
+        }
+
+        $indenter += " "
+        $indenter += $pages.Count.ToString() + " " + $name
+        foreach ($page in $pages) {
+            $indenter += $page.ToString()
+        }
+
+        return $indenter.Print()
+    }
+
     [string]StatusReports() {
         [Indenter]$indenter = [Indenter]::new()
 
-        [List[Page]]$ungradedPages = [List[Page]]::new()
-        [List[Page]]$inactivePages = [List[Page]]::new()
-        [List[Page]]$emptyPages = [List[Page]]::new()
-
-        # Get special pages in the full list
-        foreach ($notebook in $this.Notebooks) {
-            foreach ($page in $notebook.GetUngradedPages()) {
-                $ungradedPages.Add($page)
-            }
-            foreach ($page in $notebook.GetInactivePages()) {
-                $inactivePages.Add($page)
-            }
-            foreach ($page in $notebook.GetEmptyPages()) {
-                $emptyPages.Add($page)
-            }
-        }
-
-        $indenter += $ungradedPages.Count.ToString() + " ungraded pages"
-        foreach ($page in $ungradedPages) {
-            $indenter += $page.ToString()
-        }
-
-        $indenter += " "
-        $indenter += $inactivePages.Count.ToString() + " inactive pages"
-        foreach ($page in $inactivePages) {
-            $indenter += $page.ToString()
-        }
-
-        $indenter += " "
-        $indenter += $emptyPages.Count.ToString() + " empty pages"
-        foreach ($page in $emptyPages) {
-            $indenter += $page.ToString()
-        }
+        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages")
+        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages")
+        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages")
+        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages")
 
         $str = $indenter.Print()
         Set-Content -Path "OneNote x Powershell\STATUSREPORT.txt" -Value $str
