@@ -96,7 +96,7 @@ class Indenter {
     }
 
     DecreaseIndent() {
-        If ($this.Indents.Count -gt 0) {
+        if ($this.Indents.Count -gt 0) {
             $this.Indents.RemoveAt($this.Indents.Count - 1)
         }
     }
@@ -115,9 +115,15 @@ class Indenter {
         }
     }
 
-    # Note: + operator mutates the input!
+    # Note: Do not use + (since this function is mutating), instead use +=
     static [Indenter]op_Addition([Indenter]$first, [string]$second) {
-        $first.AddLine($second)
+        $first.AddLine($second.ToString())
+        return $first
+    }
+    static [Indenter]op_Addition([Indenter]$first, [System.Array]$second) {
+        foreach ($item in $second) {
+            $first += $item
+        }
         return $first
     }
 
@@ -138,10 +144,10 @@ class Ink {
     [string]$Text
 
     Ink([XmlElement]$ink, [bool]$isWord) {
-        If ($isWord) {
+        if ($isWord) {
             $this.Rect = [Rectangle]::new(-$ink.inkOriginX, -$ink.inkOriginY, $ink.width, $ink.height)
             $this.Text = "[Text]: " + $ink.recognizedText
-        } Else {
+        } else {
             $this.Rect = [Rectangle]::new($ink.Position.X, $ink.Position.Y, $ink.Size.Width, $ink.Size.Height)
             $this.Text = "[Drawing]"
         }
@@ -149,8 +155,8 @@ class Ink {
 
     [string]ToString() {
         return $this.Text +
-            $(If ($this.Text.Length -gt 0) { " " } Else { "" }) +
-            $(If ([Ink]::Debug) { $this.Rect.ToString() } Else { "" })
+            $(if ($this.Text.Length -gt 0) { " " } else { "" }) +
+            $(if ([Ink]::Debug) { $this.Rect.ToString() } else { "" })
     }
 }
 
@@ -185,14 +191,14 @@ class Image {
         $indenter = [Indenter]::new()
 
         $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to evaluate area proportions
-        If ($this.HasWork) {
+        if ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
         $indenter += $imageDisplay
             
         if ($this.Inks.Count -gt 0) {
             # INK HEADER
-            $indenter.AddLine([string]$this.Inks.Count + " inks:")
+            $indenter += [string]$this.Inks.Count + " inks:"
 
             # Ink print
             $inkIndex = 1
@@ -272,7 +278,7 @@ class Page {
             # Get contained inks
             $theInks = [List[Ink]]::new()
             foreach ($ink in $this.Inks.ToArray()) {
-                If ($ink.Rect.Intersects($theImage.Rect)) {
+                if ($ink.Rect.Intersects($theImage.Rect)) {
                     $theInks.Add($ink)
                 }
             }
@@ -296,10 +302,10 @@ class Page {
         $indenter = [Indenter]::new()
 
         $statusDisplay = $this.DateDisplay
-        If ($this.NeedsGrading -eq $true) {
+        if ($this.NeedsGrading -eq $true) {
             $statusDisplay += " (!)(needs grading)"
         }
-        ElseIf ($this.Changed -eq $true) {
+        elseif ($this.Changed -eq $true) {
             $statusDisplay += " (!)(modified)"
         }
 
@@ -307,8 +313,7 @@ class Page {
         $indenter.IncreaseIndent()
 
         # Header print
-        $indenter += $this.TagName
-        $indenter += [string]$this.Images.Count + " image(s):"
+        $indenter += $this.TagName, ([string]$this.Images.Count + " image(s):")
 
         # Image print
         $imageIndex = 1
@@ -361,7 +366,7 @@ class Section {
         
         # Header print
         $sectionDisplay = "# Section: " + $this.Name + " #"
-        If ($this.Deleted -eq $true) {
+        if ($this.Deleted -eq $true) {
             $sectionDisplay += " (deleted)"
         }
         $indenter += $sectionDisplay
@@ -439,10 +444,7 @@ class Notebook {
     [string]FullReport() {
         $indenter = [Indenter]::new()
 
-        $indenter += " "
-        $indenter += $this.Name
-        $indenter += "-------------------"
-
+        $indenter += " ", $this.Name, "-------------------"
         foreach ($section in $this.Sections) {
             $indenter += $section.FullReport()
         }
@@ -504,8 +506,7 @@ class Main {
             }
         }
 
-        $indenter += " "
-        $indenter += $pages.Count.ToString() + " " + $name
+        $indenter += " ", ($pages.Count.ToString() + " " + $name)
         foreach ($page in $pages) {
             $indenter += $page.ToString()
         }
@@ -516,10 +517,10 @@ class Main {
     [string]StatusReports() {
         [Indenter]$indenter = [Indenter]::new()
 
-        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages")
-        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages")
-        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages")
-        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages")
+        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages"),
+            $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages"),
+            $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages"),
+            $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages")
 
         $str = $indenter.Print()
         Set-Content -Path "OneNote x Powershell\STATUSREPORT.txt" -Value $str
