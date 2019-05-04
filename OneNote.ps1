@@ -39,16 +39,7 @@ class Rectangle {
     }
 
     [bool]Intersects([Rectangle]$r) {
-        if ($this.Left -gt $r.Right) {
-            return $false
-        } elseif ($r.Left -gt $this.Right) {
-            return $false
-        } elseif ($this.Top -gt $r.Bottom) {
-            return $false
-        } elseif ($r.Top -gt $this.Bottom) {
-            return $false
-        }
-        return $true
+        return -not (($this.Left -gt $r.Right) -or ($r.Left -gt $this.Right) -or ($this.Top -gt $r.Bottom) -or ($r.Top -gt $this.Bottom))
     }
 
     [float]GetArea() {
@@ -61,6 +52,7 @@ class Rectangle {
 }
 
 
+
 ####################
 # INDENTER UTILITY #
 ####################
@@ -69,7 +61,6 @@ class Indenter {
     [List[string]]$Lines
 
     Indenter() {
-        $this.Indents = [List[string]]::new()
         $this.ClearLines()
     }
 
@@ -105,7 +96,6 @@ class Indenter {
         return $this.Indents -join ""
     }
 
-
     AddLine([string]$line) {
         $this.AddLines($line -split '\r?\n')
     }
@@ -126,12 +116,59 @@ class Indenter {
         }
         return $first
     }
-
-
+    
     ClearLines() {
+        $this.Indents = [List[string]]::new()
         $this.Lines = [List[string]]::new()
     }
 }
+
+
+
+####################
+# DATEHELPER CLASS #
+####################
+class DateHelper {
+    static [Dictionary[string, int]]$WeekdayMap
+    static Init() {
+        [DateHelper]::WeekdayMap = [Dictionary[string, int]]::new()
+        [DateHelper]::WeekdayMap.Add("Monday", 1)
+        [DateHelper]::WeekdayMap.Add("Tuesday", 2)
+        [DateHelper]::WeekdayMap.Add("Wednesday", 3)
+        [DateHelper]::WeekdayMap.Add("Thursday", 4)
+        [DateHelper]::WeekdayMap.Add("Friday", 5)
+        [DateHelper]::WeekdayMap.Add("Saturday", 6)
+        [DateHelper]::WeekdayMap.Add("Sunday", 7)
+    }
+    
+    static [datetime]$Now = (Get-Date -Year 2019 -Month 4 -Day 1) # Comment out parameters to use the current date and not a debug time
+    static [datetime]$Today = [DateHelper]::Now.Date
+
+    static [bool]IsSameDay([datetime]$date1, [datetime]$date2) {
+        return $date1.Date.ToString() -eq $date2.Date.ToString()
+    }
+
+    static [bool]IsValidWeekday([string]$weekday) {
+        return [DateHelper]::WeekdayMap.ContainsKey([DateHelper]::PascalCase($weekday))
+    }
+    static [string]GetWeekday([datetime]$date) {
+        return $date.DayOfWeek.ToString()
+    }
+    static [bool]IsSameWeekday([datetime]$date1, [datetime]$date2) {
+        return [DateHelper]::GetWeekday($date1) -eq [DateHelper]::GetWeekday($date2)
+    }
+    static [bool]IsSameWeekday([datetime]$date, [string]$dateStr) {
+        return [DateHelper]::GetWeekday($date) -eq [DateHelper]::PascalCase($dateStr)
+    }
+
+    # Meant to convert raw weekday strings into formalized ones (eg "MONDAY" => "Monday") for comparison
+    static [string]PascalCase([string]$str) {
+        return $str.Substring(0, 1).ToUpper() + $str.Substring(1).ToLower()
+    }
+}
+# Init date helper class before use
+[DateHelper]::Init()
+
 
 
 #############
@@ -159,6 +196,7 @@ class Ink {
             $(if ([Ink]::Debug) { $this.Rect.ToString() } else { "" })
     }
 }
+
 
 
 ###############
@@ -215,6 +253,7 @@ class Image {
 }
 
 
+
 ##############
 # PAGE CLASS #
 ##############
@@ -226,13 +265,17 @@ class Page {
     [string]$TagName
     [XmlElement]$Tag
 
+    [datetime]$CreationTime
     [datetime]$LastAssignedTime
     [datetime]$LastModifiedTime
     [string]$DateDisplay
 
+    [datetime]$OriginalAssignmentDate
+
     [bool]$Active
     [bool]$Changed
     [bool]$HasWork
+    [bool]$Empty
     
     [List[Image]]$Images
     [List[Ink]]$Inks
@@ -254,13 +297,25 @@ class Page {
         }
 
         # Get dates
+        $this.CreationTime = [datetime]$page.dateTime
         $this.LastModifiedTime = [datetime]$page.lastModifiedTime
-        $this.DateDisplay = $page.lastModifiedTime
         if ($this.TagName -eq [Page]::DefaultTagName) {
-            $this.LastAssignedTime = [datetime]$page.dateTime
+            $this.LastAssignedTime = [datetime]$this.CreationTime
         } else {
             $this.LastAssignedTime = [datetime]$this.Tag.creationDate
         }
+
+        if ([DateHelper]::IsValidWeekday($this.Section.Name)) {
+            $this.OriginalAssignmentDate = $this.CreationTime.Date
+            while (-not [DateHelper]::IsSameWeekday($this.OriginalAssignmentDate, $this.Section.Name)) {
+                $this.OriginalAssignmentDate = $this.OriginalAssignmentDate.AddDays(1)
+            }
+        }
+        else {
+            $this.OriginalAssignmentDate = $this.LastAssignedTime
+        }
+
+        $this.DateDisplay = $this.OriginalAssignmentDate
 
         # Finds main page content
         $this.Inks = [List[Ink]]::new()
@@ -293,9 +348,10 @@ class Page {
         }
 
         # Determine the status of the page
-        $this.Active = ($this.LastModifiedTime -gt (Get-Date).AddDays(-1 * [Page]::ActiveThreshold))
+        $this.Active = ($this.LastModifiedTime -gt [DateHelper]::Now.AddDays(-1 * [Page]::ActiveThreshold))
         $this.Changed = ($this.LastModifiedTime -gt $this.LastAssignedTime)
         $this.HasWork = ($this.Images.Where({$_.HasWork -eq $true}).Count -gt 0)
+        $this.Empty = ($this.Images.Count -eq 0)
     }
 
     [string]FullReport() {
@@ -332,6 +388,7 @@ class Page {
         return "PAGE: " + $this.Section.Notebook.Name.PadRight(40) + " | " + $this.Section.Name.PadRight(40) + " | " + $this.Name
     }
 }
+
 
 
 #################
@@ -383,6 +440,7 @@ class Section {
 }
 
 
+
 ##################
 # NOTEBOOK CLASS #
 ##################
@@ -427,6 +485,16 @@ class Notebook {
         }
         return $pages
     }
+    [bool]HasPagesWhere([Func[Page,bool]]$func) {
+        foreach ($section in $this.Sections) {
+            foreach ($page in $section.Pages) {
+                if ($func.Invoke($page)) {
+                    return $true
+                }
+            }
+        }
+        return $false
+    }
 
     [List[Page]]GetUngradedPages() {
         return $this.GetPagesWhere({param([Page]$p) ($p.Changed -eq $true) -and ($p.HasWork -eq $true)})
@@ -435,10 +503,14 @@ class Notebook {
         return $this.GetPagesWhere({param([Page]$p) $p.Active -eq $false})
     }
     [List[Page]]GetEmptyPages() {
-        return $this.GetPagesWhere({param([Page]$p) $p.Images.Count -eq 0})
+        return $this.GetPagesWhere({param([Page]$p) $p.Empty -eq $true})
     }
     [List[Page]]GetUnreviewedPages() {
         return $this.GetPagesWhere({param([Page]$p) $p.TagName -like "*REVIEW*"})
+    }
+
+    [bool]HasAssignmentOn([datetime]$date) {
+        return $this.HasPagesWhere({param([Page]$p) ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date)) -and (-not $p.Empty)})
     }
 
     [string]FullReport() {
@@ -459,6 +531,7 @@ class Notebook {
 # MAIN CLASS #
 ##############
 class Main {
+    static [string]$Path = "OneNote x Powershell\Reports\"
     [List[Notebook]]$Notebooks
 
     Main() {
@@ -489,7 +562,7 @@ class Main {
         }
 
         $str = $indenter.Print()
-        Set-Content -Path "OneNote x Powershell\FULLREPORT.txt" -Value $str
+        Set-Content -Path ([Main]::Path + "FULL REPORT.txt") -Value $str
         return $str
     }
 
@@ -506,7 +579,7 @@ class Main {
             }
         }
 
-        $indenter += " ", ($pages.Count.ToString() + " " + $name)
+        $indenter += $pages.Count.ToString() + " " + $name
         foreach ($page in $pages) {
             $indenter += $page.ToString()
         }
@@ -517,20 +590,50 @@ class Main {
     [string]StatusReports() {
         [Indenter]$indenter = [Indenter]::new()
 
-        $indenter += $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages"),
-            $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages"),
-            $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages"),
-            $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages")
+        $indenter +=
+            $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages"),   " ",
+            $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages"),   " ",
+            $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages"),      " ",
+            $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages"), " "
 
         $str = $indenter.Print()
-        Set-Content -Path "OneNote x Powershell\STATUSREPORT.txt" -Value $str
+        Set-Content -Path ([Main]::Path + "STATUS REPORT.txt") -Value $str
+        return $str
+    }
+
+    [string]MissingAssignmentReport() {
+        [Indenter]$indenter = [Indenter]::new()
+
+        for([int]$i = 0; $i -lt 3; $i++) {
+            [datetime]$date = [DateHelper]::Today.AddDays($i)
+
+            $indenter += ($date.ToString().Substring(0, $date.ToString().IndexOf(" ")) + " missing:")
+            $indenter.IncreaseIndent("    - ")
+
+            foreach ($notebook in $this.Notebooks) {
+                if (-not $notebook.HasAssignmentOn($date)) {
+                    $indenter += $notebook.Name
+                }
+            }
+
+            $indenter.DecreaseIndent()
+            $indenter += " "
+        }
+        
+        $str = $indenter.Print()
+        Set-Content -Path ([Main]::Path + "MISSING ASSIGNMENT REPORT.txt") -Value $str
         return $str
     }
     
 }
 
 
+
 [Main]$main = [Main]::new()
 $main.FullReport()
 " "
+" "
 $main.StatusReports()
+" "
+" "
+$main.MissingAssignmentReport()
