@@ -228,7 +228,7 @@ class Image {
     [string]FullReport() {
         $indenter = [Indenter]::new()
 
-        $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to evaluate area proportions
+        $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to debug area proportions
         if ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
@@ -604,8 +604,14 @@ class Main {
     [string]MissingAssignmentReport() {
         [Indenter]$indenter = [Indenter]::new()
 
+        $sundayskip = 0
         for([int]$i = 0; $i -lt 3; $i++) {
-            [datetime]$date = [DateHelper]::Today.AddDays($i)
+            [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
+            if ([DateHelper]::IsSameWeekday($date, "SUNDAY")) {
+                # No assignments on sundays: skip this day
+                $sundayskip += 1
+                $date = $date.AddDays(1)
+            }
 
             $indenter += ($date.ToString().Substring(0, $date.ToString().IndexOf(" ")) + " missing:")
             $indenter.IncreaseIndent("    - ")
