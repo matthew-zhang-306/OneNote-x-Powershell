@@ -10,8 +10,36 @@ Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
 
 
 
+class HtmlManager {
+    static [string]$Style
+    
+    static [string]MakeTitle([string]$name) {
+        return "<title>" + $name + "</title>"
+    }
+    static [string]GetFullHead([string]$title) {
+        return [HtmlManager]::MakeTitle($title) + [HtmlManager]::Style
+    }
+
+    static [string]MakePre([string]$name) {
+        return "<h1>" + $name + "</h1>"
+    }
+}
+
+# Set css html (done outside of the classes because the syntax breaks when inserting leading tabs)
+[HtmlManager]::Style = @"
+    <style>
+    * {font-family: 'Courier New', monospace; box-sizing: border-box;}
+    TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
+    TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black; background-color: #FFD700;}
+    TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
+    </style>
+"@
+
+
 class Main {
     static [string]$Path = "OneNote x Powershell\Reports\"
+    static [string]$Style
+
     [List[Notebook]]$Notebooks
 
     Main() {
@@ -55,11 +83,9 @@ class Main {
 
         foreach ($notebook in $this.Notebooks) {
             [List[Page]]$list = $func.Invoke($notebook)
-            if ($list -eq $null) {
-                # Debug here because to be honest it really should not be null
-            } else {
-                $pages.AddRange($func.Invoke($notebook))
-            }
+            if ($list -eq $null) { continue }
+
+            $pages.AddRange($list)
         }
 
         $indenter += $pages.Count.ToString() + " " + $name
@@ -82,6 +108,29 @@ class Main {
         $str = $indenter.Print()
         Set-Content -Path ([Main]::Path + "STATUS REPORT.txt") -Value $str
         return $str
+    }
+
+    StatusReportHtml([Func[Notebook,List[Page]]]$func, [string]$name) {
+        [PageHtml[]]$pages = @()
+
+        foreach ($notebook in $this.Notebooks) {
+            [List[Page]]$list = $func.Invoke($notebook)
+            if ($list -eq $null) { continue }
+
+            foreach ($page in $func.Invoke($notebook)) {
+                $pages += [PageHtml]::new($page)
+            }
+        }
+
+        $html = $pages | ConvertTo-Html -As Table -Head ([HtmlManager]::GetFullHead($name)) -PreContent ([HtmlManager]::MakePre($name))
+        Set-Content -Path ("OneNote x Powershell\Reports\" + $name + ".html") -Value $html
+    }
+
+    StatusReportsHtml() {
+        $this.StatusReportHtml({param([Notebook]$n) $n.GetUngradedPages()},   "UngradedPages")
+        $this.StatusReportHtml({param([Notebook]$n) $n.GetInactivePages()},   "InactivePages")
+        $this.StatusReportHtml({param([Notebook]$n) $n.GetEmptyPages()},      "EmptyPages")
+        $this.StatusReportHtml({param([Notebook]$n) $n.GetUnreviewedPages()}, "UnreviewedPages")
     }
 
     [string]MissingAssignmentReport() {
@@ -123,6 +172,7 @@ $main.FullReport()
 " "
 " "
 $main.StatusReports()
+$main.StatusReportsHtml()
 " "
 " "
 $main.MissingAssignmentReport()
