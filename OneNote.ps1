@@ -9,7 +9,7 @@ cls
 Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
 
 
-
+# To be reworked into HtmlCreator in a separate file
 class HtmlManager {
     static [string]$Style
     
@@ -75,6 +75,11 @@ class Main {
         $str = $indenter.Print()
         Set-Content -Path ([Main]::Path + "FULL REPORT.txt") -Value $str
         return $str
+    }
+
+    FullReportHtml() {
+        # Tough implementation good luck
+
     }
 
     [string]StatusReport([Func[Notebook,List[Page]]]$func, [string]$name) {
