@@ -1,4 +1,5 @@
-﻿using namespace System.Collections.Generic
+﻿using namespace Microsoft.Office.Interop
+using namespace System.Collections.Generic
 using namespace System.Xml
 
 class Section {

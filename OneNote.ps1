@@ -2,12 +2,6 @@
 using namespace System.Collections.Generic
 using namespace System.Xml
 
-# Magic word clears the console
-cls
-
-# If Powershell for some reason doesn't recognize OneNote classes, type this into the console to magically fix it
-Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
-
 
 # To be reworked into HtmlCreator in a separate file
 class HtmlManager {

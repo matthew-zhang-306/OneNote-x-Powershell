@@ -1,4 +1,5 @@
 ﻿using namespace System.Xml
+using namespace System.Collections.Generic
 
 class Image {
     static [float] $pageFillConstant = 0.005
