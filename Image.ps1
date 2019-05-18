@@ -1,19 +1,23 @@
 ﻿using namespace System.Xml
 using namespace System.Collections.Generic
 
+Import-Module Ink -PassThru
+Import-Module Rectangle
+Import-Module Indenter
+
 class Image {
     static [float] $pageFillConstant = 0.005
     
-    [Rectangle]$Rect
-    [List[Ink]]$Inks
+    $Rect
+    [List[Object]]$Inks
     [float]$InkArea
     [bool]$HasWork
 
     Image([XmlElement]$image) {
-        $this.Rect = [Rectangle]::new($image.Position.X, $image.Position.Y, $image.Size.Width, $image.Size.Height)
+        $this.Rect = Get-NewRectangle($image.Position.X, $image.Position.Y, $image.Size.Width, $image.Size.Height)
     }
 
-    SetInk([List[Ink]]$theInks) {
+    SetInk([List[Object]]$theInks) {
         $this.Inks = $theInks
 
         $this.InkArea = 0;
@@ -25,7 +29,7 @@ class Image {
     }
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        $indenter = Get-NewIndenter
 
         $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to debug area proportions
         if ($this.HasWork) {

@@ -24,3 +24,9 @@ class Ink {
             $(if ([Ink]::Debug) { $this.Rect.ToString() } else { "" })
     }
 }
+
+function Get-NewInk($ink, $isWord) {
+  return [Ink]::new($ink, $isWord)
+}
+
+Export-ModuleMember -Function Get-NewInk
