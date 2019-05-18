@@ -80,4 +80,26 @@ class Notebook {
 
         return $indenter.Print()
     }
+
+    [string]FullReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        $html.AddTag("div", "fullReportNotebookContainer")
+        
+        $html.AddTag("p", "fullReportNotebookName")
+        $html.AddText($this.Name)
+        $html.CloseTag()
+
+        $html.AddTag("ul", "fullReportSectionList")
+        foreach ($section in $this.Sections) {
+            $html.AddTag("li", "fullReportSectionItem")
+            $html.AddHtml($section.FullReportHtml())
+            $html.CloseTag()
+        }
+        $html.CloseTag()
+
+        $html.CloseTag()
+
+        return $html.ToString()
+    }
 }

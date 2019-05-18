@@ -72,8 +72,15 @@ class Main {
     }
 
     FullReportHtml() {
-        # Tough implementation good luck
+        [HtmlCreator]$html = [HtmlCreator]::new()
 
+        $html.AddTag("div", "fullReportContainer")
+        foreach ($notebook in $this.Notebooks) {
+            $html.AddHtml($notebook.FullReportHtml())
+        }
+        $html.CloseTag()
+
+        Set-Content -Path ("OneNote x Powershell\Reports\FullReport.html") -Value $html
     }
 
     [string]StatusReport([Func[Notebook,List[Page]]]$func, [string]$name) {
@@ -168,6 +175,7 @@ class Main {
 
 [Main]$main = [Main]::new()
 $main.FullReport()
+$main.FullReportHtml()
 " "
 " "
 $main.StatusReports()

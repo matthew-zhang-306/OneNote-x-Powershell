@@ -45,4 +45,11 @@ class Section {
 
         return $indenter.Print()
     }
+
+    [string]FullReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+        # Stuff here
+
+        return $html.ToString()
+    }
 }
