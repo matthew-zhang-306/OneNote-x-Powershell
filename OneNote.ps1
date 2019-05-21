@@ -5,6 +5,8 @@ using namespace System.Xml
 # Everything is back in one file again because Powershell really dislikes classes being in separate files.
 
 
+cls
+
 ##
 # RECTANGLE CLASS
 ##
@@ -183,6 +185,13 @@ class HtmlCreator {
 
         $this.Body.IncreaseIndent()
     }
+
+    AddElement([string]$tagName, [string]$className, [string]$text) {
+        $this.AddTag($tagName, $className)
+        $this.AddText($text)
+        $this.CloseTag()
+    }
+
     CloseTag() {
         if ($this.Tags.Count -gt 0) {
             $tag = $this.Tags[$this.Tags.Count - 1]
@@ -203,25 +212,6 @@ class HtmlCreator {
 
     [string]ToString() {
         return $this.Body.Print()
-    }
-} 
-
-
-##
-# HTMLMANAGER CLASS (to be reworked)
-##
-class HtmlManager {
-    static [string]$Style
-    
-    static [string]MakeTitle([string]$name) {
-        return "<title>" + $name + "</title>"
-    }
-    static [string]GetFullHead([string]$title) {
-        return [HtmlManager]::MakeTitle($title) + [HtmlManager]::Style
-    }
-
-    static [string]MakePre([string]$name) {
-        return "<h1>" + $name + "</h1>"
     }
 }
 
@@ -303,6 +293,21 @@ class Image {
         }
         
         return $indenter.Print()
+    }
+
+    [string]FullReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        $imageDisplay = $this.Rect.ToString()
+        if ($this.HasWork) {
+            $imageDisplay += " (!)(has work)"
+        }
+
+        $html.AddTag("p", "fullReportImageSubheader")
+        $html.AddText([string]$this.Inks.Count + " ink mark(s)")
+        $html.CloseTag()
+
+        return $html.ToString()
     }
 }
 
@@ -437,28 +442,32 @@ class Page {
         return $indenter.Print()
     }
 
+    [string]FullReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        $html.AddElement("p", "fullReportPageHeader", $this.Name.PadRight(40))
+
+        $html.AddTag("ul", "fullReportPageInfoList")
+
+        $html.AddElement("li", "fullReportPageInfoDateItem", $this.DateDisplay)
+        $html.AddElement("li", "fullReportPageInfoTagItem", $this.TagName)
+
+        $html.AddTag("li", "fullReportPageInfoImageCountItem")
+        $html.AddText([string]$this.Images.Count + " page(s):")
+        $html.AddTag("ol", "fullReportImageList")
+        foreach ($image in $this.Images) {
+            $html.AddElement("li", "fullReportImageItem", $image.FullReportHtml())
+        }
+        $html.CloseTag()
+        $html.CloseTag()
+
+        $html.CloseTag()
+
+        return $html.ToString()
+    }
+
     [string]ToString() {
         return "PAGE: " + $this.Section.Notebook.Name.PadRight(40) + " | " + $this.Section.Name.PadRight(40) + " | " + $this.Name
-    }
-}
-
-
-##
-# PAGEHTML CLASS
-##
-class PageHtml {
-    [string]$NotebookName
-    [string]$SectionName
-    [string]$PageName
-    [string]$Tag
-
-    PageHtml([Page]$page) {
-        if ($page -ne $null) {
-            $this.NotebookName = $page.Section.Notebook.Name
-            $this.SectionName = $page.Section.Name
-            $this.PageName = $page.Name
-            $this.Tag = $page.TagName
-        }
     }
 }
 
@@ -512,7 +521,18 @@ class Section {
 
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
-        # Stuff here
+        
+        $html.AddElement("p", "fullReportSectionHeader", "Section: " + $this.Name)
+
+        if ($this.Deleted) {
+            $html.AddElement("p", "fullReportSectionSubheader", " (deleted)")
+        }
+
+        $html.AddTag("ul", "fullReportPageList")
+        foreach ($page in $this.Pages) {
+            $html.AddElement("li", "fullReportPageItem", $page.FullReportHtml())
+        }
+        $html.CloseTag()
 
         return $html.ToString()
     }
@@ -608,15 +628,11 @@ class Notebook {
 
         $html.AddTag("div", "fullReportNotebookContainer")
         
-        $html.AddTag("p", "fullReportNotebookName")
-        $html.AddText($this.Name)
-        $html.CloseTag()
+        $html.AddElement("p", "fullReportNotebookName", $this.Name)
 
         $html.AddTag("ul", "fullReportSectionList")
         foreach ($section in $this.Sections) {
-            $html.AddTag("li", "fullReportSectionItem")
-            $html.AddHtml($section.FullReportHtml())
-            $html.CloseTag()
+            $html.AddElement("li", "fullReportSectionItem", $section.FullReportHtml())
         }
         $html.CloseTag()
 
@@ -671,17 +687,17 @@ class Main {
         return $str
     }
 
-    [string]FullReportHtml() {
+    FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
         $html.AddTag("div", "fullReportContainer")
         foreach ($notebook in $this.Notebooks) {
             $html.AddHtml($notebook.FullReportHtml())
+            $html.AddBreak()
         }
         $html.CloseTag()
 
         Set-Content -Path ("Reports\FullReport.html") -Value $html.ToString()
-        return $html.ToString()
     }
 
     [string]StatusReport([Func[Notebook,List[Page]]]$func, [string]$name) {
@@ -718,18 +734,33 @@ class Main {
     }
 
     StatusReportHtml([Func[Notebook,List[Page]]]$func, [string]$name) {
-        [PageHtml[]]$pages = @()
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        $html.AddTag("table", "statusReportTable")
+        
+        $html.AddTag("tr", "statusReportHeaderRow")
+        $html.AddElement("th", "statusReportHeaderNotebook", "Notebook")
+        $html.AddElement("th", "statusReportHeaderSection", "Section")
+        $html.AddElement("th", "statusReportHeaderPage", "Page")
+        $html.AddElement("th", "statusReportHeaderTag", "Tag")
+        $html.CloseTag()
 
         foreach ($notebook in $this.Notebooks) {
             [List[Page]]$list = $func.Invoke($notebook)
             if ($list -eq $null) { continue }
 
             foreach ($page in $func.Invoke($notebook)) {
-                $pages += [PageHtml]::new($page)
+                $html.AddTag("tr", "statusReportPageRow")
+                $html.AddElement("td", "statusReportPageNotebook", $page.Section.Notebook.Name)
+                $html.AddElement("td", "statusReportPageSection", $page.Section.Name)
+                $html.AddElement("td", "statusReportPage", $page.Name)
+                $html.AddElement("td", "statusReportPageTag", $page.TagName)
+                $html.CloseTag()
             }
         }
 
-        $html = $pages | ConvertTo-Html -As Table -Head ([HtmlManager]::GetFullHead($name)) -PreContent ([HtmlManager]::MakePre($name))
+        $html.CloseTag()
+
         Set-Content -Path ("Reports\" + $name + ".html") -Value $html
     }
 
@@ -769,6 +800,42 @@ class Main {
         Set-Content -Path ([Main]::Path + "MISSING ASSIGNMENT REPORT.txt") -Value $str
         return $str
     }
+
+    MissingAssignmentReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        $html.AddTag("div", "missingAssignmentContainer")
+
+        $sundayskip = 0
+        for([int]$i = 0; $i -lt 3; $i++) {
+            $html.AddTag("div", "missingAssignmentDayContainer")
+
+            [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
+            if ([DateHelper]::IsSameWeekday($date, "SUNDAY")) {
+                # No assignments on sundays: skip this day
+                $sundayskip += 1
+                $date = $date.AddDays(1)
+            }
+            
+            $html.AddElement("p", "missingAssignmentDayHeader", $date.ToString().Substring(0, $date.ToString().IndexOf(" ")))
+            $html.AddElement("p", "missingAssignmentDaySubheader", "Students missing assignments:")
+
+            $html.AddTag("ul", "missingAssignmentStudentList")
+            foreach ($notebook in $this.Notebooks) {
+                if (-not $notebook.HasAssignmentOn($date)) {
+                    $html.AddElement("li", "missingAssignmentStudentItem", $notebook.Name)
+                }
+            }
+            $html.CloseTag()
+
+            $html.CloseTag()
+            $html.AddBreak()
+        }
+
+        $html.CloseTag()
+
+        Set-Content -Path ("Reports\MissingAssignmentReport.html") -Value $html.ToString()
+    }
     
 }
 
@@ -796,6 +863,7 @@ TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
     " "
     " "
     $main.MissingAssignmentReport()
+    $main.MissingAssignmentReportHtml()
 }
 
 Main
