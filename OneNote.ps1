@@ -304,7 +304,7 @@ class Image {
         }
 
         $html.AddTag("p", "fullReportImageSubheader")
-        $html.AddText([string]$this.Inks.Count + " ink mark(s)")
+        $html.AddText([string]$this.Inks.Count + " mark(s)")
         $html.CloseTag()
 
         return $html.ToString()
@@ -373,7 +373,7 @@ class Page {
             $this.OriginalAssignmentDate = $this.LastAssignedTime
         }
 
-        $this.DateDisplay = $this.OriginalAssignmentDate
+        $this.DateDisplay = $this.OriginalAssignmentDate.ToString('MM/dd/yyyy')
 
         # Finds main page content
         $this.Inks = [List[Ink]]::new()
@@ -445,15 +445,17 @@ class Page {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
-        $html.AddElement("p", "fullReportPageHeader", $this.Name.PadRight(40))
+        $html.AddElement("p", "fullReportPageHeader", $this.Name)
 
         $html.AddTag("ul", "fullReportPageInfoList")
 
         $html.AddElement("li", "fullReportPageInfoDateItem", $this.DateDisplay)
-        $html.AddElement("li", "fullReportPageInfoTagItem", $this.TagName)
+        if ($this.TagName -ne [Page]::DefaultTagName) {
+            $html.AddElement("li", "fullReportPageInfoTagItem", $this.TagName)
+        }
 
         $html.AddTag("li", "fullReportPageInfoImageCountItem")
-        $html.AddText([string]$this.Images.Count + " page(s):")
+        $html.AddText("Pages:")
         $html.AddTag("ol", "fullReportImageList")
         foreach ($image in $this.Images) {
             $html.AddElement("li", "fullReportImageItem", $image.FullReportHtml())
@@ -521,12 +523,6 @@ class Section {
 
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
-        
-        $html.AddElement("p", "fullReportSectionHeader", "Section: " + $this.Name)
-
-        if ($this.Deleted) {
-            $html.AddElement("p", "fullReportSectionSubheader", " (deleted)")
-        }
 
         $html.AddTag("ul", "fullReportPageList")
         foreach ($page in $this.Pages) {
@@ -630,10 +626,22 @@ class Notebook {
         
         $html.AddElement("p", "fullReportNotebookName", $this.Name)
 
-        $html.AddTag("ul", "fullReportSectionList")
+        $html.AddTag("div", "fullReportSectionTableContainer")
+        $html.AddTag("table", "fullReportSectionTable")
+        
+        $html.AddTag("tr", "fullReportSectionHeaderRow")
         foreach ($section in $this.Sections) {
-            $html.AddElement("li", "fullReportSectionItem", $section.FullReportHtml())
+            $html.AddElement("th", "fullReportSectionCellHeader", $section.Name)
         }
+        $html.CloseTag()
+
+        $html.AddTag("tr", "fullReportSectionRow")
+        foreach ($section in $this.Sections) {
+            $html.AddElement("th", "fullReportSectionCellItem", $section.FullReportHtml())
+        }
+        $html.CloseTag()
+
+        $html.CloseTag()
         $html.CloseTag()
 
         $html.CloseTag()
