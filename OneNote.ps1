@@ -63,7 +63,7 @@ class DateHelper {
         [DateHelper]::WeekdayMap.Add("Sunday", 7)
     }
     
-    static [datetime]$Now = (Get-Date -Year 2019 -Month 4 -Day 1) # Comment out parameters to use the current date and not a debug time
+    static [datetime]$Now = (Get-Date)# -Year 2019 -Month 4 -Day 1) # Comment out parameters to use the current date and not a debug time
     static [datetime]$Today = [DateHelper]::Now.Date
 
     static [bool]IsSameDay([datetime]$date1, [datetime]$date2) {
