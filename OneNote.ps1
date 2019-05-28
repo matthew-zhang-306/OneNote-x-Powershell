@@ -769,7 +769,7 @@ class Main {
 
         $html.CloseTag()
 
-        Set-Content -Path ("Reports\" + $name + ".html") -Value $html
+        Set-Content -Path ("Reports\Html\" + $name + ".html") -Value $html
     }
 
     StatusReportsHtml() {
@@ -845,22 +845,50 @@ class Main {
         Set-Content -Path ("Reports\MissingAssignmentReport.html") -Value $html.ToString()
     }
     
+    
+    UploadHtml() {
+        try {
+            $cred = Get-Content -Path "config.txt"
+            $ip = $cred[0]
+            $user = $cred[1]
+            $pass = $cred[2]
+            $onlinePath = $cred[3]
+
+            $sessionOptions = New-Object WinSCP.SessionOptions -Property @{
+                Protocol = [WinSCP.Protocol]::Ftp
+                HostName = $ip
+                UserName = $user
+                Password = $pass
+            }
+
+            $session = New-Object WinSCP.Session
+
+            try {
+                $session.Open($sessionOptions)
+
+                $transferOptions = New-Object WinSCP.TransferOptions
+                $transferOptions.TransferMode = [WinSCP.TransferMode]::Binary
+
+                $transferResult = $session.PutFiles((Get-Location).Path + "\Reports\Html", $onlinePath, $False, $transferOptions)
+                $transferResult.Check()
+
+                foreach ($transfer in $transferResult.Transfers)
+                {
+                    Write-Host "Upload of $($transfer.FileName) succeeded"
+                }
+            }
+            finally {
+                $session.Dispose()
+            }
+        }
+        catch {
+            Write-Host "Error uploading: $($_.Exception.Message)"
+        }
+    }
 }
 
 
 Function Main() {
-
-# Set css html (leading tabs removed because they break the world, apparently)
-[HtmlManager]::Style = @"
-<style>
-* {font-family: 'Courier New', monospace; box-sizing: border-box;}
-TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
-TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black; background-color: #FFD700;}
-TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
-</style>
-"@
-
-
     [Main]$main = [Main]::new()
     $main.FullReport()
     $main.FullReportHtml()
@@ -872,6 +900,9 @@ TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
     " "
     $main.MissingAssignmentReport()
     $main.MissingAssignmentReportHtml()
+    " "
+    " "
+    $main.UploadHtml()
 }
 
 Main
