@@ -705,7 +705,7 @@ class Main {
         }
         $html.CloseTag()
 
-        Set-Content -Path ("Reports\FullReport.html") -Value $html.ToString()
+        Set-Content -Path ("Reports\Html\FullReport.html") -Value $html.ToString()
     }
 
     [string]StatusReport([Func[Notebook,List[Page]]]$func, [string]$name) {
@@ -842,7 +842,7 @@ class Main {
 
         $html.CloseTag()
 
-        Set-Content -Path ("Reports\MissingAssignmentReport.html") -Value $html.ToString()
+        Set-Content -Path ("Reports\Html\MissingAssignmentReport.html") -Value $html.ToString()
     }
     
     
@@ -869,6 +869,7 @@ class Main {
                 $transferOptions = New-Object WinSCP.TransferOptions
                 $transferOptions.TransferMode = [WinSCP.TransferMode]::Binary
 
+                # Add the new files
                 $transferResult = $session.PutFiles((Get-Location).Path + "\Reports\Html", $onlinePath, $False, $transferOptions)
                 $transferResult.Check()
 
