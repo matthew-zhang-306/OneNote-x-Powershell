@@ -524,11 +524,9 @@ class Section {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
-        $html.AddTag("ul", "fullReportPageList")
         foreach ($page in $this.Pages) {
-            $html.AddElement("li", "fullReportPageItem", $page.FullReportHtml())
+            $html.AddElement("div", "fullReportPageItem", $page.FullReportHtml())
         }
-        $html.CloseTag()
 
         return $html.ToString()
     }

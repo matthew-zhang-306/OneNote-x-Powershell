@@ -1,6 +1,10 @@
 ﻿try {
-    cd $psISE.CurrentFile.FullPath.Replace("\Application.ps1","")
-    
+    if ($PSScriptRoot -ne $null) {
+        cd $PSScriptRoot
+    } else {
+        cd $psISE.CurrentFile.FullPath.Replace("\Application.ps1","")
+    }
+
     Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
 
     Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
