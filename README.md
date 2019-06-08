@@ -8,6 +8,7 @@ For Gideon Math & Reading
 
 * [OneNote](https://docs.microsoft.com/en-us/office/client-developer/onenote/application-interface-onenote) - .NET APIs
 * [WinSCP](https://winscp.net/eng/index.php) - FTP
+* [PS2EXE](https://gallery.technet.microsoft.com/scriptcenter/PS2EXE-Convert-PowerShell-ab973757) - EXE
 
 ## Authors
 
