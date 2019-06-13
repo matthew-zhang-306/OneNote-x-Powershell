@@ -303,9 +303,7 @@ class Image {
             $imageDisplay += " (!)(has work)"
         }
 
-        $html.AddTag("p", "fullReportImageSubheader")
-        $html.AddText([string]$this.Inks.Count + " mark(s)")
-        $html.CloseTag()
+        $html.AddElement("p", "fullReportImageSubheader", [string]$this.Inks.Count + " mark(s)")
 
         return $html.ToString()
     }
@@ -326,9 +324,8 @@ class Page {
     [datetime]$CreationTime
     [datetime]$LastAssignedTime
     [datetime]$LastModifiedTime
-    [string]$DateDisplay
-
     [datetime]$OriginalAssignmentDate
+    [string]$DateDisplay
 
     [bool]$Active
     [bool]$Changed
@@ -343,9 +340,28 @@ class Page {
         $this.Name = $page.Name
         $this.Section = $section
 
-        # Get tag
+        $this.FetchTag($content)
+        $this.FetchDates($page)
+
+        $this.Inks = [List[Ink]]::new()
+        $this.FetchInks($content)
+
+        $this.Images = [List[Image]]::new()
+        $this.FetchImages($content)
+
+        $this.FetchStatus()
+
+        # Debug log full XML
+        if ($page.name.StartsWith("Quest2-B_answerkey")) { # <-- change this string
+            Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
+        }
+    }
+
+    FetchTag([xml]$content) {
         [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
         [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
+        
+        # Both items must eixst for there to be a tag
         if (($tags.Length -gt 0) -and ($tagDefs.Length -gt 0)) {
             $this.Tag = $tags[0]
             $this.TagName = $tagDefs[0].Name
@@ -353,10 +369,12 @@ class Page {
         else {
             $this.TagName = [Page]::DefaultTagName
         }
+    }
 
-        # Get dates
+    FetchDates([XmlElement]$page) {
         $this.CreationTime = [datetime]$page.dateTime
         $this.LastModifiedTime = [datetime]$page.lastModifiedTime
+        
         if ($this.TagName -eq [Page]::DefaultTagName) {
             $this.LastAssignedTime = [datetime]$this.CreationTime
         } else {
@@ -373,18 +391,22 @@ class Page {
             $this.OriginalAssignmentDate = $this.LastAssignedTime
         }
 
+        # Set date string
         $this.DateDisplay = $this.OriginalAssignmentDate.ToString('MM/dd/yyyy')
+    }
 
-        # Finds main page content
-        $this.Inks = [List[Ink]]::new()
+    FetchInks([xml]$content) {
+        # Check for ink drawings
         foreach ($ink in $content.GetElementsByTagName("one:InkDrawing")) {
             $this.Inks.Add([Ink]::new($ink, $false))
         }
+        # Check for ink words
         foreach ($ink in $content.GetElementsByTagName("one:InkWord")) {
             $this.Inks.Add([Ink]::new($ink, $true))
         }
+    }
 
-        $this.Images = [List[Image]]::new()
+    FetchImages([xml]$content) {
         foreach ($image in $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}) {
             $theImage = [Image]::new($image)
 
@@ -399,13 +421,9 @@ class Page {
             
             $this.Images.Add($theImage)
         }
+    }
 
-        # Debug log full XML
-        if ($page.name.StartsWith("Quest2-B_answerkey")) { # <-- change this string
-            Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
-        }
-
-        # Determine the status of the page
+    FetchStatus() {
         $this.Active = $this.LastModifiedTime -gt [DateHelper]::Now.AddDays(-1 * [Page]::ActiveThreshold)
         $this.Changed = $this.LastModifiedTime -gt $this.LastAssignedTime
         $this.HasWork = $this.Images.Where({$_.HasWork -eq $true}).Count -gt 0
@@ -489,6 +507,10 @@ class Section {
         $this.Notebook = $notebook
 
         $this.Pages = [List[Page]]::new()
+        $this.FetchPages($section)
+    }
+
+    FetchPages([XmlElement]$section) {
         foreach ($pageXml in $section.Page) {
             # We cannot pass a ComObject as a parameter and still have it work, so it is redefined here
             $onenote = New-Object -ComObject OneNote.Application
