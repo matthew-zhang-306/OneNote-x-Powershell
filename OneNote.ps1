@@ -334,6 +334,7 @@ class Page {
     
     [List[Image]]$Images
     [List[Ink]]$Inks
+    [SuperPage]$SuperPage
     [Section]$Section
 
     Page([XmlElement]$page, [xml]$content, [Section]$section) {
@@ -493,18 +494,51 @@ class Page {
 
 
 ##
+# SUPERPAGE CLASS
+##
+class SuperPage {
+    [string]$Name
+    [List[Page]]$Pages
+    [Section]$Section
+
+    SuperPage([XmlElement]$superpage, [Section]$section) {
+        $this.Name = $superpage.Name
+        $this.Section = $section
+
+        $this.FetchPages()
+        # to do add more functionality
+    }
+
+    FetchPages() {
+        # to do write method
+    }
+}
+
+
+##
 # SECTION CLASS
 ##
 class Section {
     [string]$Name
     [bool]$Deleted
     [List[Page]]$Pages
+    [SectionGroup]$SectionGroup
     [Notebook]$Notebook
 
     Section([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
         $this.Deleted = $section.IsInRecycleBin
         $this.Notebook = $notebook
+
+        $this.Pages = [List[Page]]::new()
+        $this.FetchPages($section)
+    }
+    Section([XmlElement]$section, [SectionGroup]$sectiongroup) {
+        # to do fix copy paste
+        $this.SectionGroup = $sectiongroup
+        $this.Name = $section.Name
+        $this.Deleted = $section.IsInRecycleBin
+        $this.Notebook = $sectiongroup.Notebook
 
         $this.Pages = [List[Page]]::new()
         $this.FetchPages($section)
@@ -551,6 +585,27 @@ class Section {
         }
 
         return $html.ToString()
+    }
+}
+
+
+##
+# SECTIONGROUP CLASS
+##
+class SectionGroup {
+    [string]$Name
+    [Notebook]$Notebook
+
+    SectionGroup([XmlElement]$sectiongroup, [Notebook]$notebook) {
+        $this.Name = $sectiongroup.Name
+        $this.Notebook = $notebook
+
+        $this.FetchSections()
+        # to do add more functionality
+    }
+
+    FetchSections() {
+        # to do write method
     }
 }
 
@@ -678,6 +733,8 @@ class Main {
     static [string]$Path = "Reports\"
     static [string]$Style
 
+    static [int]$MissingAssignmentLookahead = 7
+
     [List[Notebook]]$Notebooks
 
     Main() {
@@ -803,7 +860,7 @@ class Main {
         [Indenter]$indenter = [Indenter]::new()
 
         $sundayskip = 0
-        for([int]$i = 0; $i -lt 3; $i++) {
+        for([int]$i = 0; $i -lt [Main]::MissingAssignmentLookahead; $i++) {
             [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
             if ([DateHelper]::IsSameWeekday($date, "SUNDAY")) {
                 # No assignments on sundays: skip this day
