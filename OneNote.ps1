@@ -351,11 +351,6 @@ class Page {
         $this.FetchImages($content)
 
         $this.FetchStatus()
-
-        # Debug log full XML
-        if ($page.name.StartsWith("Quest2-B_answerkey")) { # <-- change this string
-            Set-Content -Path "OneNote x Powershell\log.txt" -Value $content.InnerXml
-        }
     }
 
     FetchTag([xml]$content) {
@@ -505,12 +500,11 @@ class SuperPage {
         $this.Name = $superpage.Name
         $this.Section = $section
 
-        $this.FetchPages()
-        # to do add more functionality
+        $this.FetchPages($superpage)
     }
 
-    FetchPages() {
-        # to do write method
+    FetchPages([XmlElement]$superpage) {
+        
     }
 }
 
@@ -594,18 +588,38 @@ class Section {
 ##
 class SectionGroup {
     [string]$Name
+    [List[Section]]$Sections
     [Notebook]$Notebook
 
     SectionGroup([XmlElement]$sectiongroup, [Notebook]$notebook) {
         $this.Name = $sectiongroup.Name
         $this.Notebook = $notebook
-
-        $this.FetchSections()
-        # to do add more functionality
+        
+        $this.Sections = [List[Section]]::new()
+        $this.FetchSections($sectiongroup)
     }
 
-    FetchSections() {
-        # to do write method
+    FetchSections([XmlElement]$sectiongroup) {
+        foreach ($sectionXml in $sectiongroup.Section) {
+            $this.Sections.Add([Section]::new($sectionXml, $this))
+        }
+    }
+
+    [string]FullReport() {
+        $indenter = [Indenter]::new()
+        
+        # Header print
+        $sectionDisplay = "# SectionGroup: " + $this.Name + " #"
+        $indenter += $sectionDisplay
+
+        # Section print
+        $indenter.IncreaseIndent()
+        foreach ($section in $this.Sections) {
+            $indenter += $section.FullReport()
+        }
+        $indenter.DecreaseIndent()
+
+        return $indenter.Print()
     }
 }
 
@@ -618,30 +632,24 @@ class Notebook {
     [string]$Name
     [bool]$Deleted
     [List[Section]]$Sections
+    [List[SectionGroup]]$SectionGroups
 
     Notebook([XmlElement]$notebook) {
         $this.Name = $notebook.Name
         $this.Deleted = $notebook.IsInRecycleBin
 
-        [List[XmlElement]]$sectionXmls = [List[XmlElement]]::new()
+        # Debug log xml
+        Set-Content -Path "log.txt" -Value $notebook.InnerXml
+
+        $this.SectionGroups = [List[SectionGroup]]::new()
         # Checks for all sections placed in a sectiongroup
         foreach ($sectiongroup in $notebook.SectionGroup) {
-            if ($sectiongroup.isInRecycleBin -eq $false) {
-                foreach ($sectionXml in $sectiongroup.Section) {
-                    $sectionXmls.Add($sectionXml)
-                }
+            if ($sectiongroup.isRecycleBin -ne $true) {
+                $this.SectionGroups.Add([SectionGroup]::new($sectiongroup, $this))
             }
         }
-        # Checks for any sections not placed in a sectiongroup
-        foreach ($sectionXml in $notebook.Section) {
-            $sectionXmls.Add($sectionXml)
-        }
 
-        # Goes through all the xml pieces and makes section objects
         $this.Sections = [List[Section]]::new()
-        foreach ($sectionXml in $sectionXmls) {
-            $this.Sections.Add([Section]::new($sectionXml, $this))
-        }
     }
 
     [List[Page]]GetPagesWhere([Func[Page,bool]]$func) {
@@ -687,8 +695,8 @@ class Notebook {
         $indenter = [Indenter]::new()
 
         $indenter += " ", $this.Name, "-------------------"
-        foreach ($section in $this.Sections) {
-            $indenter += $section.FullReport()
+        foreach ($sectiongroup in $this.SectionGroups) {
+            $indenter += $sectiongroup.FullReport()
         }
 
         return $indenter.Print()
@@ -755,7 +763,9 @@ class Main {
                 continue
             }
 
-            $this.Notebooks.Add([Notebook]::new($notebookXml))
+            if ($notebookXml.Name.Contains("Sai")) {
+                $this.Notebooks.Add([Notebook]::new($notebookXml))
+            }
         }
     }
 
@@ -968,8 +978,10 @@ class Main {
 
 Function Main() {
     [Main]$main = [Main]::new()
+    
     $main.FullReport()
     $main.FullReportHtml()
+    <#
     " "
     " "
     $main.StatusReports()
@@ -981,6 +993,7 @@ Function Main() {
     " "
     " "
     $main.UploadHtml()
+    #>
 }
 
 Main
