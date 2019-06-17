@@ -334,12 +334,14 @@ class Page {
     
     [List[Image]]$Images
     [List[Ink]]$Inks
-    [SuperPage]$SuperPage
+
     [Section]$Section
+    [SectionGroup]$SectionGroup
 
     Page([XmlElement]$page, [xml]$content, [Section]$section) {
         $this.Name = $page.Name
         $this.Section = $section
+        $this.SectionGroup = $section.SectionGroup
 
         $this.FetchTag($content)
         $this.FetchDates($page)
@@ -489,33 +491,13 @@ class Page {
 
 
 ##
-# SUPERPAGE CLASS
-##
-class SuperPage {
-    [string]$Name
-    [List[Page]]$Pages
-    [Section]$Section
-
-    SuperPage([XmlElement]$superpage, [Section]$section) {
-        $this.Name = $superpage.Name
-        $this.Section = $section
-
-        $this.FetchPages($superpage)
-    }
-
-    FetchPages([XmlElement]$superpage) {
-        
-    }
-}
-
-
-##
 # SECTION CLASS
 ##
 class Section {
     [string]$Name
     [bool]$Deleted
     [List[Page]]$Pages
+
     [SectionGroup]$SectionGroup
     [Notebook]$Notebook
 
@@ -574,6 +556,7 @@ class Section {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
+        $html.AddElement("p", "fullReportSectionHeader", $this.Name)
         foreach ($page in $this.Pages) {
             $html.AddElement("div", "fullReportPageItem", $page.FullReportHtml())
         }
@@ -621,6 +604,16 @@ class SectionGroup {
 
         return $indenter.Print()
     }
+
+    [string]FullReportHtml() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        foreach ($section in $this.Sections) {
+            $html.AddElement("div", "fullReportSectionItem", $section.FullReportHtml())
+        }
+
+        return $html.ToString()
+    }
 }
 
 
@@ -642,14 +635,24 @@ class Notebook {
         Set-Content -Path "log.txt" -Value $notebook.InnerXml
 
         $this.SectionGroups = [List[SectionGroup]]::new()
-        # Checks for all sections placed in a sectiongroup
+        $this.FetchSectionGroups($notebook)
+
+        $this.Sections = [List[Section]]::new()
+        $this.LoadSections()
+    }
+
+    FetchSectionGroups([XmlElement]$notebook) {
         foreach ($sectiongroup in $notebook.SectionGroup) {
             if ($sectiongroup.isRecycleBin -ne $true) {
                 $this.SectionGroups.Add([SectionGroup]::new($sectiongroup, $this))
             }
         }
+    }
 
-        $this.Sections = [List[Section]]::new()
+    LoadSections() {
+        foreach ($sectiongroup in $this.SectionGroups) {
+            $this.Sections.AddRange($sectiongroup.Sections)  
+        }
     }
 
     [List[Page]]GetPagesWhere([Func[Page,bool]]$func) {
@@ -712,15 +715,15 @@ class Notebook {
         $html.AddTag("div", "fullReportSectionTableContainer")
         $html.AddTag("table", "fullReportSectionTable")
         
-        $html.AddTag("tr", "fullReportSectionHeaderRow")
-        foreach ($section in $this.Sections) {
-            $html.AddElement("th", "fullReportSectionCellHeader", $section.Name)
+        $html.AddTag("tr", "fullReportSectionGroupHeaderRow")
+        foreach ($sectiongroup in $this.SectionGroups) {
+            $html.AddElement("th", "fullReportSectionGroupCellHeader", $sectiongroup.Name)
         }
         $html.CloseTag()
 
-        $html.AddTag("tr", "fullReportSectionRow")
-        foreach ($section in $this.Sections) {
-            $html.AddElement("th", "fullReportSectionCellItem", $section.FullReportHtml())
+        $html.AddTag("tr", "fullReportSectionGrouopRow")
+        foreach ($sectiongroup in $this.SectionGroups) {
+            $html.AddElement("th", "fullReportSectionGroupCellItem", $sectiongroup.FullReportHtml())
         }
         $html.CloseTag()
 
@@ -835,6 +838,7 @@ class Main {
         
         $html.AddTag("tr", "statusReportHeaderRow")
         $html.AddElement("th", "statusReportHeaderNotebook", "Notebook")
+        $html.AddElement("th", "statusReportHeaderSectionGroup", "Section Group")
         $html.AddElement("th", "statusReportHeaderSection", "Section")
         $html.AddElement("th", "statusReportHeaderPage", "Page")
         $html.AddElement("th", "statusReportHeaderTag", "Tag")
@@ -847,6 +851,7 @@ class Main {
             foreach ($page in $func.Invoke($notebook)) {
                 $html.AddTag("tr", "statusReportPageRow")
                 $html.AddElement("td", "statusReportPageNotebook", $page.Section.Notebook.Name)
+                $html.AddElement("td", "statusReportPageSectionGroup", $page.SectionGroup.Name)
                 $html.AddElement("td", "statusReportPageSection", $page.Section.Name)
                 $html.AddElement("td", "statusReportPage", $page.Name)
                 $html.AddElement("td", "statusReportPageTag", $page.TagName)
@@ -981,7 +986,6 @@ Function Main() {
     
     $main.FullReport()
     $main.FullReportHtml()
-    <#
     " "
     " "
     $main.StatusReports()
@@ -992,8 +996,7 @@ Function Main() {
     $main.MissingAssignmentReportHtml()
     " "
     " "
-    $main.UploadHtml()
-    #>
+    # $main.UploadHtml()
 }
 
 Main
