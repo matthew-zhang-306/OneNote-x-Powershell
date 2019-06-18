@@ -379,9 +379,9 @@ class Page {
             $this.LastAssignedTime = [datetime]$this.Tag.creationDate
         }
 
-        if ([DateHelper]::IsValidWeekday($this.Section.Name)) {
+        if ([DateHelper]::IsValidWeekday($this.SectionGroup.Name)) {
             $this.OriginalAssignmentDate = $this.CreationTime.Date
-            while (-not [DateHelper]::IsSameWeekday($this.OriginalAssignmentDate, $this.Section.Name)) {
+            while (-not [DateHelper]::IsSameWeekday($this.OriginalAssignmentDate, $this.SectionGroup.Name)) {
                 $this.OriginalAssignmentDate = $this.OriginalAssignmentDate.AddDays(1)
             }
         }
@@ -632,7 +632,7 @@ class Notebook {
         $this.Deleted = $notebook.IsInRecycleBin
 
         # Debug log xml
-        Set-Content -Path "log.txt" -Value $notebook.InnerXml
+        # Set-Content -Path "log.txt" -Value $notebook.InnerXml
 
         $this.SectionGroups = [List[SectionGroup]]::new()
         $this.FetchSectionGroups($notebook)
@@ -765,10 +765,8 @@ class Main {
             if ($notebookXml.Name.Contains("QuestLearning's")) {
                 continue
             }
-
-            if ($notebookXml.Name.Contains("Sai")) {
-                $this.Notebooks.Add([Notebook]::new($notebookXml))
-            }
+            
+            $this.Notebooks.Add([Notebook]::new($notebookXml))
         }
     }
 
@@ -996,7 +994,7 @@ Function Main() {
     $main.MissingAssignmentReportHtml()
     " "
     " "
-    # $main.UploadHtml()
+    $main.UploadHtml()
 }
 
 Main
