@@ -526,22 +526,30 @@ class Section {
     [Notebook]$Notebook
 
     Section([XmlElement]$section, [Notebook]$notebook) {
-        $this.Name = $section.Name
-        $this.Deleted = $section.IsInRecycleBin
-        $this.Notebook = $notebook
-
-        $this.Pages = [List[Page]]::new()
-        $this.FetchPages($section)
+        $this.Init($section, $notebook)
     }
     Section([XmlElement]$section, [SectionGroup]$sectiongroup) {
         # to do fix copy paste
         $this.SectionGroup = $sectiongroup
+        $this.Init($section, $sectiongroup.Notebook)
+    }
+    Init([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
         $this.Deleted = $section.IsInRecycleBin
-        $this.Notebook = $sectiongroup.Notebook
+        $this.Notebook = $notebook
+
+        $this.CheckForSubject()
 
         $this.Pages = [List[Page]]::new()
         $this.FetchPages($section)
+    }
+
+    CheckForSubject() {
+        foreach ($subject in [Notebook]::AllSubjects) {
+            if ($this.Name.ToLower().Contains($subject.ToLower())) {
+                $this.Notebook.AddSubject($subject)
+            }
+        }
     }
 
     FetchPages([XmlElement]$section) {
@@ -615,9 +623,13 @@ class SectionGroup {
 # NOTEBOOK CLASS
 ##
 class Notebook {
+    static [string[]]$AllSubjects = "Math", "Reading", "Grammar"
+
     [string]$Name
     [bool]$Deleted
     [List[Section]]$Sections
+
+    [List[string]]$Subjects
 
     Notebook([XmlElement]$notebook) {
         $this.Name = $notebook.Name
@@ -641,6 +653,15 @@ class Notebook {
         $this.Sections = [List[Section]]::new()
         foreach ($sectionXml in $sectionXmls) {
             $this.Sections.Add([Section]::new($sectionXml, $this))
+        }
+    }
+
+    AddSubject([string]$subject) {
+        if ($this.Subjects -eq $null) {
+            $this.Subjects = [List[string]]::new()
+        }
+        if ($this.Subjects.IndexOf($subject) -lt 0) {
+            $this.Subjects.Add($subject)
         }
     }
 
