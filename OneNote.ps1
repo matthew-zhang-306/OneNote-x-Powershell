@@ -63,7 +63,7 @@ class DateHelper {
         [DateHelper]::WeekdayMap.Add("Sunday", 7)
     }
     
-    static [datetime]$Now = (Get-Date)# -Year 2019 -Month 4 -Day 1) # Comment out parameters to use the current date and not a debug time
+    static [datetime]$Now = (Get-Date -Year 2019 -Month 6 -Day 11) # Comment out parameters to use the current date and not a debug time
     static [datetime]$Today = [DateHelper]::Now.Date
 
     static [bool]IsSameDay([datetime]$date1, [datetime]$date2) {
@@ -321,6 +321,8 @@ class Page {
     [string]$TagName
     [XmlElement]$Tag
 
+    [string]$Subject
+
     [datetime]$CreationTime
     [datetime]$LastAssignedTime
     [datetime]$LastModifiedTime
@@ -342,6 +344,8 @@ class Page {
         $this.Name = $page.Name
         $this.Section = $section
         $this.SectionGroup = $section.SectionGroup
+
+        $this.Subject = $section.Subject
 
         $this.FetchTag($content)
         $this.FetchDates($page)
@@ -498,6 +502,8 @@ class Section {
     [bool]$Deleted
     [List[Page]]$Pages
 
+    [string]$Subject
+
     [SectionGroup]$SectionGroup
     [Notebook]$Notebook
 
@@ -524,6 +530,7 @@ class Section {
         foreach ($subject in [Notebook]::AllSubjects) {
             if ($this.Name.ToLower().Contains($subject.ToLower())) {
                 $this.Notebook.AddSubject($subject)
+                $this.Subject = $subject
             }
         }
     }
@@ -711,8 +718,30 @@ class Notebook {
         return $this.GetPagesWhere({param([Page]$p) $p.TagName -like "*REVIEW*"})
     }
 
-    [bool]HasAssignmentOn([datetime]$date) {
-        return $this.HasPagesWhere({param([Page]$p) ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date)) -and (-not $p.Empty)})
+    [string]MissingAssignmentReport([datetime]$date) {
+        [Indenter]$indenter = [Indenter]::new()
+
+        foreach ($subject in $this.Subjects) {
+            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject -eq $subject) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
+            if (-not $has) {
+                $indenter += ($this.Name + " - " + $subject)
+            }
+        }
+
+        return $indenter.Print()
+    }
+    
+    [string]MissingAssignmentReportHtml([datetime]$date) {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        foreach ($subject in $this.Subjects) {
+            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject -eq $subject) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
+            if (-not $has) {
+                $html.AddElement("li", "missingAssignmentStudentItem", $this.Name + " " + $subject)
+            }
+        }
+
+        return $html.ToString()
     }
 
     [string]FullReport() {
@@ -906,8 +935,9 @@ class Main {
             $indenter.IncreaseIndent("    - ")
 
             foreach ($notebook in $this.Notebooks) {
-                if (-not $notebook.HasAssignmentOn($date)) {
-                    $indenter += $notebook.Name
+                [string]$nOut = $notebook.MissingAssignmentReport($date)
+                if ($nOut.Length -gt 0) {
+                    $indenter += $nOut
                 }
             }
 
@@ -926,7 +956,7 @@ class Main {
         $html.AddTag("div", "missingAssignmentContainer")
 
         $sundayskip = 0
-        for([int]$i = 0; $i -lt 3; $i++) {
+        for([int]$i = 0; $i -lt [Main]::MissingAssignmentLookahead; $i++) {
             $html.AddTag("div", "missingAssignmentDayContainer")
 
             [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
@@ -941,8 +971,9 @@ class Main {
 
             $html.AddTag("ul", "missingAssignmentStudentList")
             foreach ($notebook in $this.Notebooks) {
-                if (-not $notebook.HasAssignmentOn($date)) {
-                    $html.AddElement("li", "missingAssignmentStudentItem", $notebook.Name)
+                [string]$nOut = $notebook.MissingAssignmentReportHtml($date)
+                if ($nOut.Length -gt 0) {
+                    $html.AddHtml($nOut)
                 }
             }
             $html.CloseTag()
