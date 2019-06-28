@@ -7,9 +7,11 @@ using namespace System.Xml
 
 cls
 
-##
-# RECTANGLE CLASS
-##
+<#
+RECTANGLE CLASS
+
+Stores information about the position of an axis-aligned rectangle.
+#>
 class Rectangle {
     [float]$X
     [float]$Y
@@ -21,6 +23,8 @@ class Rectangle {
     [float]$Top
     [float]$Bottom
 
+    # Constructor using x, y, width, and height
+    # Usage: $rect = [Rectangle]::new(0, 0, 10, 10)
     Rectangle([float]$x, [float]$y, [float]$w, [float]$h) {
         $this.X = $x
         $this.Y = $y
@@ -33,24 +37,33 @@ class Rectangle {
         $this.Bottom = $y + $h
     }
 
+    # Returns whether or not rectangle $r overlaps with this rectangle
+    # Usage: $rect.Intersects($otherRect) <== $true, eg
     [bool]Intersects([Rectangle]$r) {
         return -not (($this.Left -gt $r.Right) -or ($r.Left -gt $this.Right) -or ($this.Top -gt $r.Bottom) -or ($r.Top -gt $this.Bottom))
     }
 
+    # Returns the area of the rectangle
+    # Usage: $rect.GetArea() <== 4.0, eg
     [float]GetArea() {
         return $this.Width * $this.Height
     }
 
+    # Returns an output string describing the object
+    # Usage: $rect.ToString() <== RECT[0, 0, 10, 10], eg
     [string]ToString() {
         return "RECT[" + $this.X + ", " + $this.Y + ", " + $this.Width + ", " + $this.Height + "]"
     }
 }
 
 
-##
-# DATEHELPER CLASS
-##
+<#
+DATEHELPER CLASS
+
+Contains static variables and objects to facilitate date calculations
+#>
 class DateHelper {
+    # A set of valid weekdays and their associated order
     static [Dictionary[string, int]]$WeekdayMap
     static Init() {
         [DateHelper]::WeekdayMap = [Dictionary[string, int]]::new()
@@ -63,19 +76,32 @@ class DateHelper {
         [DateHelper]::WeekdayMap.Add("Sunday", 7)
     }
     
+    # The current time
     static [datetime]$Now = (Get-Date -Year 2019 -Month 6 -Day 11) # Comment out parameters to use the current date and not a debug time
+    
+    # The current date
     static [datetime]$Today = [DateHelper]::Now.Date
 
+    # Returns whether two times are on the same date
+    # Usage: [DateHelper]::IsSameDay($d1, $d2) <== $true, eg
     static [bool]IsSameDay([datetime]$date1, [datetime]$date2) {
         return $date1.Date.ToString() -eq $date2.Date.ToString()
     }
 
+    # Returns whether a label is an existing weekday
+    # Usage: [DateHelper]::IsValidWeekday("monday") <== $true
     static [bool]IsValidWeekday([string]$weekday) {
         return [DateHelper]::WeekdayMap.ContainsKey([DateHelper]::PascalCase($weekday))
     }
+
+    # Returns the weekday on which a time falls
+    # Usage: [DateHelper]::GetWeekday($d) <== "Monday", eg
     static [string]GetWeekday([datetime]$date) {
         return $date.DayOfWeek.ToString()
     }
+
+    # Returns whether the given date is the same weekday as another date or a weekday string
+    # Usage: [DateHelper]::IsSameWeekday($d1, $d2) <== $true, eg
     static [bool]IsSameWeekday([datetime]$date1, [datetime]$date2) {
         return [DateHelper]::GetWeekday($date1) -eq [DateHelper]::GetWeekday($date2)
     }
@@ -83,24 +109,34 @@ class DateHelper {
         return [DateHelper]::GetWeekday($date) -eq [DateHelper]::PascalCase($dateStr)
     }
 
-    # Meant to convert raw weekday strings into formalized ones (eg "MONDAY" => "Monday") for comparison
+    # Converts a one-word string to pascal case
+    # Used to convert raw weekday strings into formalized ones (eg "MONDAY" => "Monday") for comparison
     static [string]PascalCase([string]$str) {
         return $str.Substring(0, 1).ToUpper() + $str.Substring(1).ToLower()
     }
 }
 
 
-##
-# INDENTER CLASS
-##
+<#
+INDENTER CLASS
+
+Formats a report by inserting indentations before specific lines of text
+#>
 class Indenter {
+    # The current stack of indentations
     [List[string]]$Indents
+
+    # The lines in the output, with indents included
     [List[string]]$Lines
 
+    # Constructor
+    # Usage: $ind = [Indenter]::new()
     Indenter() {
         $this.ClearLines()
     }
 
+    # Returns all of the lines in one string
+    # Usage: Write-Host $ind.Print()
     [string]Print() {
         return $this.Print($this.Lines)
     }
@@ -112,10 +148,13 @@ class Indenter {
         return $this.Print($output)
     }
     [string]Print([List[string]]$output) {
-        # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. the inconsistency is weird
+        # note to self: when splitting strings only '\r\n' works, but when joining strings only "`r`n" works. powershell even cares about which quote marks you use. the inconsistency is weird
         return $output -join "`r`n"
     }
 
+    # Adds an indent to the output
+    # Default indent is a 4-space tab
+    # Usage: $ind.IncreaseIndent("  - ")
     IncreaseIndent() {
         $this.IncreaseIndent("    ")
     }
@@ -123,16 +162,22 @@ class Indenter {
         $this.Indents.Add($indent)
     }
 
+    # Removes an indent from the output
+    # Usage: $ind.DecreaseIndent()
     DecreaseIndent() {
         if ($this.Indents.Count -gt 0) {
             $this.Indents.RemoveAt($this.Indents.Count - 1)
         }
     }
 
+    # Returns the combined indent string which will preceed every line added to the output
+    # Usage: $ind.GetCurrentIndent() + $str <== "            triple indented", eg
     [string]GetCurrentIndent() {
         return $this.Indents -join ""
     }
 
+    # Adds one or more lines to the output, applying indentation
+    # Usage: $ind.AddLine($str)
     AddLine([string]$line) {
         $this.AddLines($line -split '\r?\n')
     }
@@ -142,7 +187,9 @@ class Indenter {
         }
     }
 
-    # Note: Do not use + (since this function is mutating), instead use +=
+    # Overload for + operator which functions like AddLine()
+    # Usage: $ind += ($str1 + " " + $str2)
+    # Note: This function is mutating so in every situation use +=, not +!
     static [Indenter]op_Addition([Indenter]$first, [string]$second) {
         $first.AddLine($second.ToString())
         return $first
@@ -154,6 +201,8 @@ class Indenter {
         return $first
     }
     
+    # Resets the object to a clean state
+    # Usage: $ind.ClearLines()
     ClearLines() {
         $this.Indents = [List[string]]::new()
         $this.Lines = [List[string]]::new()
@@ -161,22 +210,33 @@ class Indenter {
 }
 
 
-##
-# HTMLCREATOR CLASS
-##
+<#
+HTMLCREATOR CLASS
+
+Formats HTML output, handling tags using an Indenter object
+#>
 class HtmlCreator {
+    # The stack of currently open tags
     [List[string]]$Tags
+
+    # The current HTML block
     [Indenter]$Body
 
+    # Constructor
+    # Usage: $html = [HtmlCreator]::new()
     HtmlCreator() {
         $this.Tags = [List[string]]::new()
         $this.Body = [Indenter]::new()
     }
 
+    # Adds a single line break to the HTML
+    # Usage: $html.AddBreak()
     AddBreak() {
         $this.Body += "<br>"
     }
 
+    # Opens a tag in the HTML
+    # Usage: $html.AddTag("div", "exampleDiv")
     AddTag([string]$tagName, [string]$className) {
         $this.Tags.Add($tagName)
 
@@ -186,12 +246,17 @@ class HtmlCreator {
         $this.Body.IncreaseIndent()
     }
 
+    # Creates a single HTML element with content between two tags
+    # Works as a shortcut for AddTag => AddText => CloseTag
+    # Usage: $html.AddElement("div, "exampleDiv", "<strong>Sample</strong> text")
     AddElement([string]$tagName, [string]$className, [string]$text) {
         $this.AddTag($tagName, $className)
         $this.AddText($text)
         $this.CloseTag()
     }
 
+    # Closes the previously opened tag in the HTML
+    # Usage: $html.CloseTag()
     CloseTag() {
         if ($this.Tags.Count -gt 0) {
             $tag = $this.Tags[$this.Tags.Count - 1]
@@ -202,29 +267,40 @@ class HtmlCreator {
         }
     }
 
+    # Adds any text or HTML to the output
+    # Does not validate the input so be sure that what goes in is proper HTML
+    # Usage: $html.AddText("<strong>Sample</strong> text")
     AddText([string]$text) {
         $this.Body += $text
     }
 
-    AddHtml([string]$html) {
-        $this.Body += $html
-    }
-
+    # Returns the output of the HTML
+    # Usage: Set-Content -Path "out.html" -Value $html.ToString()
     [string]ToString() {
         return $this.Body.Print()
     }
 }
 
 
-##
-# INK CLASS
-##
+<#
+INK CLASS
+
+Stores information about an ink mark on a notebook page
+#>
 class Ink {
+    # Whether or not the ToString() output should include a lot of detail
     static [bool]$Debug = $false
 
+
+    # The box which the ink mark occupies
     [Rectangle]$Rect
+
+    # A label to identify the ink drawing
     [string]$Text
 
+    # Constructor using the raw XML object and an indication of its type
+    # $isWord should be $true if the element is one:InkWord and $false if the element is one:InkDrawing
+    # Usage: $ink = [Ink]::new()
     Ink([XmlElement]$ink, [bool]$isWord) {
         if ($isWord) {
             $this.Rect = [Rectangle]::new(-$ink.inkOriginX, -$ink.inkOriginY, $ink.width, $ink.height)
@@ -235,6 +311,7 @@ class Ink {
         }
     }
 
+    # Returns a string detailing the ink
     [string]ToString() {
         return $this.Text +
             $(if ($this.Text.Length -gt 0) { " " } else { "" }) +
@@ -243,21 +320,34 @@ class Ink {
 }
 
 
-##
-# IMAGE CLASS
-##
+<#
+IMAGE CLASS
+
+Stores information about an image (assumed to be an assigned book page) in a notebook page
+#>
 class Image {
+    # The ink area to image area ratio which must be met for the work to be considered substantial
     static [float] $pageFillConstant = 0.005
     
+
+    # The box which the image occupies
     [Rectangle]$Rect
+
+    # The ink marks contained inside the image
     [List[Ink]]$Inks
     [float]$InkArea
+
+    # Whether or not the page contains an adequate amount of marks
     [bool]$HasWork
 
+    # Constructor using the raw XML object
+    # Usage: $image = [Image]::new($imageXml)
     Image([XmlElement]$image) {
         $this.Rect = [Rectangle]::new($image.Position.X, $image.Position.Y, $image.Size.Width, $image.Size.Height)
     }
 
+    # Finds out how much ink is on the page and determines work status
+    # Usage: $image.SetInk($allInks)
     SetInk([List[Ink]]$theInks) {
         $this.Inks = $theInks
 
@@ -268,6 +358,7 @@ class Image {
 
         $this.HasWork = $this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant
     }
+    
 
     [string]FullReport() {
         $indenter = [Indenter]::new()
@@ -310,36 +401,63 @@ class Image {
 }
 
 
-##
-# PAGE CLASS
-##
+<#
+PAGE CLASS
+
+Stores information about a single notebook page
+#>
 class Page {
+    # The number of days that must elapse before the page is considered inactive
     static [float]$ActiveThreshold = 3.0
+
+    # Tag name to be used when there is no tag on the page
     static [string]$DefaultTagName = "# NoTag #"
 
+    # Basic page information
     [string]$Name
     [string]$TagName
     [XmlElement]$Tag
 
+    # The subject is obtained from the name of the parent Section
     [string]$Subject
 
-    [datetime]$CreationTime
-    [datetime]$LastAssignedTime
-    [datetime]$LastModifiedTime
-    [datetime]$OriginalAssignmentDate
-    [string]$DateDisplay
-
-    [bool]$Active
-    [bool]$Changed
-    [bool]$HasWork
-    [bool]$Empty
-    
-    [List[Image]]$Images
-    [List[Ink]]$Inks
-
+    # Parent objects
     [Section]$Section
     [SectionGroup]$SectionGroup
 
+    # Contained items
+    [List[Image]]$Images
+    [List[Ink]]$Inks
+
+    # The time when the page was created
+    [datetime]$CreationTime
+
+    # The time when the page was last tagged by an instructor
+    [datetime]$LastAssignedTime
+
+    # The time when the page was previously edited
+    [datetime]$LastModifiedTime
+
+    # The date when the page was intended to be completed
+    [datetime]$OriginalAssignmentDate
+
+    # Formatted string for associating a date with the page
+    [string]$DateDisplay
+
+    # True when the page has been updated recently
+    [bool]$Active
+    
+    # True when the page was updated
+    [bool]$Changed
+
+    # True when the page contains images with work
+    [bool]$HasWork
+
+    # True when the page contains no images
+    [bool]$Empty
+
+    # Constructor using the raw XML object, the content object from OneNote.Application, and the parent Section
+    # Usage: $page = [Page]::new($pageXml, $content, $parentSection)
     Page([XmlElement]$page, [xml]$content, [Section]$section) {
         $this.Name = $page.Name
         $this.Section = $section
@@ -359,6 +477,8 @@ class Page {
         $this.FetchStatus()
     }
 
+    # Searches for tag information in the content
+    # Used by the constructor
     FetchTag([xml]$content) {
         [XmlElement[]]$tags = $content.GetElementsByTagName("one:Tag")
         [XmlElement[]]$tagDefs = $content.GetElementsByTagName("one:TagDef")
@@ -373,6 +493,8 @@ class Page {
         }
     }
 
+    # Searches for date information in the xml
+    # Used by the constructor
     FetchDates([XmlElement]$page) {
         $this.CreationTime = [datetime]$page.dateTime
         $this.LastModifiedTime = [datetime]$page.lastModifiedTime
@@ -397,6 +519,8 @@ class Page {
         $this.DateDisplay = $this.OriginalAssignmentDate.ToString('MM/dd/yyyy')
     }
 
+    # Searches for ink items in the content
+    # Used by the constructor
     FetchInks([xml]$content) {
         # Check for ink drawings
         foreach ($ink in $content.GetElementsByTagName("one:InkDrawing")) {
@@ -408,6 +532,8 @@ class Page {
         }
     }
 
+    # Searches for image items in the content
+    # Used by the constructor
     FetchImages([xml]$content) {
         foreach ($image in $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}) {
             $theImage = [Image]::new($image)
@@ -425,12 +551,20 @@ class Page {
         }
     }
 
+    # Calculates status variables for the page using formulas
     FetchStatus() {
         $this.Active = $this.LastModifiedTime -gt [DateHelper]::Now.AddDays(-1 * [Page]::ActiveThreshold)
         $this.Changed = $this.LastModifiedTime -gt $this.LastAssignedTime
         $this.HasWork = $this.Images.Where({$_.HasWork -eq $true}).Count -gt 0
         $this.Empty = $this.Images.Count -eq 0
     }
+
+    # Returns a string containing basic page information
+    # Usage: Write-Host $page.ToString()
+    [string]ToString() {
+        return "PAGE: " + $this.Section.Notebook.Name.PadRight(40) + " | " + $this.Section.Name.PadRight(40) + " | " + $this.Name
+    }
+
 
     [string]FullReport() {
         $indenter = [Indenter]::new()
@@ -487,33 +621,38 @@ class Page {
 
         return $html.ToString()
     }
-
-    [string]ToString() {
-        return "PAGE: " + $this.Section.Notebook.Name.PadRight(40) + " | " + $this.Section.Name.PadRight(40) + " | " + $this.Name
-    }
 }
 
 
-##
-# SECTION CLASS
-##
+<#
+SECTION CLASS
+
+Stores information about a notebook section
+#>
 class Section {
+    # Basic information
     [string]$Name
     [bool]$Deleted
-    [List[Page]]$Pages
 
+    # Subject is obtained from the section name
     [string]$Subject
 
+    # Contained pages
+    [List[Page]]$Pages
+
+    # Parent objects
     [SectionGroup]$SectionGroup
     [Notebook]$Notebook
 
-    Section([XmlElement]$section, [Notebook]$notebook) {
-        $this.Init($section, $notebook)
-    }
+    # Constructor using the raw XML object and the parent object
+    # Use the $sectiongroup version unless there is no parent section group
+    # Usage: $section = [Section]::new($sectionXml, $parentSectionGroup)
     Section([XmlElement]$section, [SectionGroup]$sectiongroup) {
-        # to do fix copy paste
         $this.SectionGroup = $sectiongroup
         $this.Init($section, $sectiongroup.Notebook)
+    }
+    Section([XmlElement]$section, [Notebook]$notebook) {
+        $this.Init($section, $notebook)
     }
     Init([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
@@ -526,6 +665,8 @@ class Section {
         $this.FetchPages($section)
     }
 
+    # Sees if the section name contains subject information and if so notifies the parent notebook
+    # Used by the constructor
     CheckForSubject() {
         foreach ($subject in [Notebook]::AllSubjects) {
             if ($this.Name.ToLower().Contains($subject.ToLower())) {
@@ -535,6 +676,8 @@ class Section {
         }
     }
 
+    # Searches for contained pages in the xml
+    # Used by the constructor
     FetchPages([XmlElement]$section) {
         foreach ($pageXml in $section.Page) {
             # We cannot pass a ComObject as a parameter and still have it work, so it is redefined here
@@ -547,6 +690,7 @@ class Section {
             $this.Pages.Add([Page]::new($pageXml, $content, $this))
         }
     }
+
 
     [string]FullReport() {
         $indenter = [Indenter]::new()
@@ -581,14 +725,23 @@ class Section {
 }
 
 
-##
-# SECTIONGROUP CLASS
-##
+<#
+SECTIONGROUP CLASS
+
+Stores information about a notebook section group
+#>
 class SectionGroup {
+    # Basic information
     [string]$Name
+
+    # Contained sections
     [List[Section]]$Sections
+
+    # Parent object
     [Notebook]$Notebook
 
+    # Constructor using the raw XML object and the parent notebook
+    # Usage: $sectiongroup = [SectionGroup]::new($sectiongroupXml, $parentNotebook)
     SectionGroup([XmlElement]$sectiongroup, [Notebook]$notebook) {
         $this.Name = $sectiongroup.Name
         $this.Notebook = $notebook
@@ -597,11 +750,14 @@ class SectionGroup {
         $this.FetchSections($sectiongroup)
     }
 
+    # Searches for contained sections
+    # Used by the constructor
     FetchSections([XmlElement]$sectiongroup) {
         foreach ($sectionXml in $sectiongroup.Section) {
             $this.Sections.Add([Section]::new($sectionXml, $this))
         }
     }
+
 
     [string]FullReport() {
         $indenter = [Indenter]::new()
@@ -633,19 +789,28 @@ class SectionGroup {
 
 
 
-##
-# NOTEBOOK CLASS
-##
+<#
+NOTEBOOK CLASS
+
+Stores information about a OneNote notebook
+#>
 class Notebook {
+    # Array containing all assignable subject names
     static [string[]]$AllSubjects = "Math", "Reading", "Grammar"
 
+    # Basic information
     [string]$Name
     [bool]$Deleted
+
+    # Child items
     [List[Section]]$Sections
     [List[SectionGroup]]$SectionGroups
 
+    # Subjects which are assigned to this particular notebook
     [List[string]]$Subjects
 
+    # Constructor using the raw XML object
+    # Usage: $notebook = [Notebook]::new($notebookXml)
     Notebook([XmlElement]$notebook) {
         $this.Name = $notebook.Name
         $this.Deleted = $notebook.IsInRecycleBin
@@ -660,6 +825,8 @@ class Notebook {
         $this.LoadSections()
     }
 
+    # Searches for contained section groups
+    # Used by the constructor
     FetchSectionGroups([XmlElement]$notebook) {
         foreach ($sectiongroup in $notebook.SectionGroup) {
             if ($sectiongroup.isRecycleBin -ne $true) {
@@ -668,12 +835,14 @@ class Notebook {
         }
     }
 
+    # Updates the sections list to include the child items of the sectiongroup list
     LoadSections() {
         foreach ($sectiongroup in $this.SectionGroups) {
             $this.Sections.AddRange($sectiongroup.Sections)  
         }
     }
 
+    # Adds a subject string to the subject list but only if it is valid and not there
     AddSubject([string]$subject) {
         if ($this.Subjects -eq $null) {
             $this.Subjects = [List[string]]::new()
@@ -683,6 +852,7 @@ class Notebook {
         }
     }
 
+    # Returns a filtered list of contained pages that satisfy a given check function
     [List[Page]]GetPagesWhere([Func[Page,bool]]$func) {
         [List[Page]]$pages = [List[Page]]::new()
         foreach ($section in $this.Sections) {
@@ -694,6 +864,8 @@ class Notebook {
         }
         return $pages
     }
+
+    # Returns true if at least one of the contained pages satisfies the given check function
     [bool]HasPagesWhere([Func[Page,bool]]$func) {
         foreach ($section in $this.Sections) {
             foreach ($page in $section.Pages) {
@@ -705,6 +877,7 @@ class Notebook {
         return $false
     }
 
+    # Status reports
     [List[Page]]GetUngradedPages() {
         return $this.GetPagesWhere({param([Page]$p) $p.Changed -and $p.HasWork})
     }
@@ -717,6 +890,7 @@ class Notebook {
     [List[Page]]GetUnreviewedPages() {
         return $this.GetPagesWhere({param([Page]$p) $p.TagName -like "*REVIEW*"})
     }
+
 
     [string]MissingAssignmentReport([datetime]$date) {
         [Indenter]$indenter = [Indenter]::new()
@@ -787,9 +961,11 @@ class Notebook {
 }
 
 
-##
-# MAIN CLASS
-##
+<#
+MAIN CLASS
+
+Contains the main report generating functionality of the script
+#>
 class Main {
     static [string]$Path = "Reports\"
     static [string]$Style
@@ -838,7 +1014,7 @@ class Main {
 
         $html.AddTag("div", "fullReportContainer")
         foreach ($notebook in $this.Notebooks) {
-            $html.AddHtml($notebook.FullReportHtml())
+            $html.AddText($notebook.FullReportHtml())
             $html.AddBreak()
         }
         $html.CloseTag()
@@ -973,7 +1149,7 @@ class Main {
             foreach ($notebook in $this.Notebooks) {
                 [string]$nOut = $notebook.MissingAssignmentReportHtml($date)
                 if ($nOut.Length -gt 0) {
-                    $html.AddHtml($nOut)
+                    $html.AddText($nOut)
                 }
             }
             $html.CloseTag()
