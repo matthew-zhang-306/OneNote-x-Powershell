@@ -648,21 +648,20 @@ class Section {
     # Use the $sectiongroup version unless there is no parent section group
     # Usage: $section = [Section]::new($sectionXml, $parentSectionGroup)
     Section([XmlElement]$section, [SectionGroup]$sectiongroup) {
-        $this.SectionGroup = $sectiongroup
         $this.Init($section, $sectiongroup.Notebook)
+        $this.SectionGroup = $sectiongroup
+
+        $this.Pages = [List[Page]]::new()
+        $this.FetchPages($section)
     }
     Section([XmlElement]$section, [Notebook]$notebook) {
         $this.Init($section, $notebook)
+        $this.CheckForSubject()
     }
     Init([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
         $this.Deleted = $section.IsInRecycleBin
         $this.Notebook = $notebook
-
-        $this.CheckForSubject()
-
-        $this.Pages = [List[Page]]::new()
-        $this.FetchPages($section)
     }
 
     # Sees if the section name contains subject information and if so notifies the parent notebook
@@ -822,7 +821,11 @@ class Notebook {
         $this.FetchSectionGroups($notebook)
 
         $this.Sections = [List[Section]]::new()
-        $this.LoadSections()
+        $this.FetchSections($notebook)
+
+        if ($this.Name -eq "Sai") {
+            
+        }
     }
 
     # Searches for contained section groups
@@ -835,10 +838,14 @@ class Notebook {
         }
     }
 
-    # Updates the sections list to include the child items of the sectiongroup list
-    LoadSections() {
+    # Updates the sections list to include the child items of the sectiongroup list, and goes through any sections placed outside of section groups
+    FetchSections([XmlElement]$notebook) {
         foreach ($sectiongroup in $this.SectionGroups) {
             $this.Sections.AddRange($sectiongroup.Sections)  
+        }
+
+        foreach ($section in $notebook.Section) {
+            [Section]::new($section, $this)
         }
     }
 
@@ -896,7 +903,7 @@ class Notebook {
         [Indenter]$indenter = [Indenter]::new()
 
         foreach ($subject in $this.Subjects) {
-            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject -eq $subject) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
+            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject.ToLower() -eq $subject.ToLower()) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
             if (-not $has) {
                 $indenter += ($this.Name + " - " + $subject)
             }
