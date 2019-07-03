@@ -77,7 +77,7 @@ class DateHelper {
     }
     
     # The current time
-    static [datetime]$Now = (Get-Date -Year 2019 -Month 6 -Day 11) # Comment out parameters to use the current date and not a debug time
+    static [datetime]$Now = (Get-Date -Year 2019 -Month 6 -Day 13) # Comment out parameters to use the current date and not a debug time
     
     # The current date
     static [datetime]$Today = [DateHelper]::Now.Date
@@ -650,13 +650,14 @@ class Section {
     Section([XmlElement]$section, [SectionGroup]$sectiongroup) {
         $this.Init($section, $sectiongroup.Notebook)
         $this.SectionGroup = $sectiongroup
+        $this.CheckForSubject($false)
 
         $this.Pages = [List[Page]]::new()
         $this.FetchPages($section)
     }
     Section([XmlElement]$section, [Notebook]$notebook) {
         $this.Init($section, $notebook)
-        $this.CheckForSubject()
+        $this.CheckForSubject($true)
     }
     Init([XmlElement]$section, [Notebook]$notebook) {
         $this.Name = $section.Name
@@ -666,11 +667,14 @@ class Section {
 
     # Sees if the section name contains subject information and if so notifies the parent notebook
     # Used by the constructor
-    CheckForSubject() {
+    CheckForSubject([bool]$updateNotebook) {
         foreach ($subject in [Notebook]::AllSubjects) {
             if ($this.Name.ToLower().Contains($subject.ToLower())) {
-                $this.Notebook.AddSubject($subject)
                 $this.Subject = $subject
+
+                if ($updateNotebook) {
+                    $this.Notebook.AddSubject($subject)
+                }
             }
         }
     }
@@ -743,6 +747,10 @@ class SectionGroup {
     # Usage: $sectiongroup = [SectionGroup]::new($sectiongroupXml, $parentNotebook)
     SectionGroup([XmlElement]$sectiongroup, [Notebook]$notebook) {
         $this.Name = $sectiongroup.Name
+        if ($this.Name -match "^\d+\W* \w+$") { # The section group name might be something like "1. Monday" for proper sorting order, in which case we want to remove the "1. " part
+            $this.Name = $this.Name.Substring($this.Name.LastIndexOf(' ') + 1)
+        }
+
         $this.Notebook = $notebook
         
         $this.Sections = [List[Section]]::new()
@@ -808,9 +816,13 @@ class Notebook {
     # Subjects which are assigned to this particular notebook
     [List[string]]$Subjects
 
+    [datetime]$prev
+
     # Constructor using the raw XML object
     # Usage: $notebook = [Notebook]::new($notebookXml)
     Notebook([XmlElement]$notebook) {
+        Write-Host ("Processing " + $notebook.Name)
+
         $this.Name = $notebook.Name
         $this.Deleted = $notebook.IsInRecycleBin
 
@@ -822,10 +834,6 @@ class Notebook {
 
         $this.Sections = [List[Section]]::new()
         $this.FetchSections($notebook)
-
-        if ($this.Name -eq "Sai") {
-            
-        }
     }
 
     # Searches for contained section groups
@@ -898,13 +906,18 @@ class Notebook {
         return $this.GetPagesWhere({param([Page]$p) $p.TagName -like "*REVIEW*"})
     }
 
+    # Missing assignment report
+    [bool]HasAssignedPages($subject, $date) {
+        $this.prev = $date
+        return $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject.ToLower() -eq $subject.ToLower()) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
+    }
+
 
     [string]MissingAssignmentReport([datetime]$date) {
         [Indenter]$indenter = [Indenter]::new()
 
         foreach ($subject in $this.Subjects) {
-            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject.ToLower() -eq $subject.ToLower()) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
-            if (-not $has) {
+            if (-not $this.HasAssignedPages($subject, $date)) {
                 $indenter += ($this.Name + " - " + $subject)
             }
         }
@@ -914,15 +927,41 @@ class Notebook {
     
     [string]MissingAssignmentReportHtml([datetime]$date) {
         [HtmlCreator]$html = [HtmlCreator]::new()
+        [bool]$flag = $false
 
-        foreach ($subject in $this.Subjects) {
-            $has = $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject -eq $subject) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
-            if (-not $has) {
-                $html.AddElement("li", "missingAssignmentStudentItem", $this.Name + " " + $subject)
+        $html.AddTag("tr", "missingAssignmentStudentRow")
+
+        $html.AddElement("td", "missingAssignmentCellItem", $this.Name)
+
+        foreach ($subject in [Notebook]::AllSubjects) {
+            [string]$class = "missingAssignmentCellItem"
+            [string]$content = ""
+
+            if ($this.Subjects -eq $null -or -not $this.Subjects.Contains($subject)) {
+                $class += "NA"
+                $content += "N/A"   
             }
+            elseif ($this.HasAssignedPages($subject, $date)) {
+                $class += "OK"
+                $content += "&nbsp;"
+            }
+            else {
+                $class += "X"
+                $content += "X"
+                $flag = $true
+            }
+
+            $html.AddElement("td", $class, $content)
         }
 
-        return $html.ToString()
+        $html.CloseTag()
+
+        if ($flag) {
+            return $html.ToString()
+        }
+        else {
+            return ""
+        }
     }
 
     [string]FullReport() {
@@ -1150,18 +1189,28 @@ class Main {
             }
             
             $html.AddElement("p", "missingAssignmentDayHeader", $date.ToString().Substring(0, $date.ToString().IndexOf(" ")))
-            $html.AddElement("p", "missingAssignmentDaySubheader", "Students missing assignments:")
+            $html.AddElement("p", "missingAssignmentDaySubheader", "Assignments missing:")
 
-            $html.AddTag("ul", "missingAssignmentStudentList")
+            $html.AddTag("table", "missingAssignmentDayTable")
+            $html.AddTag("tbody", "missingAssignmentTableBody")
+
+            $html.AddTag("tr", "missingAssignmentHeaderRow")
+            $html.AddElement("th", "missingAssignmentCellHeader", "Name")
+            foreach ($subject in [Notebook]::AllSubjects) {
+                $html.AddElement("th", "missingAssignmentCellHeader", $subject)
+            }
+            $html.CloseTag()
+            
             foreach ($notebook in $this.Notebooks) {
                 [string]$nOut = $notebook.MissingAssignmentReportHtml($date)
                 if ($nOut.Length -gt 0) {
                     $html.AddText($nOut)
                 }
             }
-            $html.CloseTag()
 
             $html.CloseTag()
+            $html.CloseTag()
+
             $html.AddBreak()
         }
 
@@ -1217,12 +1266,12 @@ class Main {
 Function Main() {
     [Main]$main = [Main]::new()
     
-    $main.FullReport()
-    $main.FullReportHtml()
+    # $main.FullReport()
+    # $main.FullReportHtml()
     " "
     " "
-    $main.StatusReports()
-    $main.StatusReportsHtml()
+    # $main.StatusReports()
+    # $main.StatusReportsHtml()
     " "
     " "
     $main.MissingAssignmentReport()
