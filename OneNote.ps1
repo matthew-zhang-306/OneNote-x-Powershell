@@ -954,7 +954,7 @@ class Notebook {
 
         $html.AddTag("tr", "fullReportSectionGrouopRow")
         foreach ($sectiongroup in $this.SectionGroups) {
-            $html.AddElement("th", "fullReportSectionGroupCellItem", $sectiongroup.FullReportHtml())
+            $html.AddElement("td", "fullReportSectionGroupCellItem", $sectiongroup.FullReportHtml())
         }
         $html.CloseTag()
 
