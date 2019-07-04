@@ -1266,12 +1266,12 @@ class Main {
 Function Main() {
     [Main]$main = [Main]::new()
     
-    # $main.FullReport()
-    # $main.FullReportHtml()
+    $main.FullReport()
+    $main.FullReportHtml()
     " "
     " "
-    # $main.StatusReports()
-    # $main.StatusReportsHtml()
+    $main.StatusReports()
+    $main.StatusReportsHtml()
     " "
     " "
     $main.MissingAssignmentReport()
