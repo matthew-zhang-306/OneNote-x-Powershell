@@ -1,4 +1,5 @@
 ﻿using namespace Microsoft.Office.Interop
+using namespace System
 using namespace System.Collections.Generic
 using namespace System.Xml
 
@@ -141,7 +142,7 @@ class Indenter {
         return $this.Print($this.Lines)
     }
     [string]Print([string]$outputRaw) {
-        $output = [List[string]]::new()
+        [List[string]]$output = [List[string]]::new()
         foreach ($line in ($outputRaw -split '\r?\n')) {
             $output.Add($this.GetCurrentIndent() + $line)
         }
@@ -194,7 +195,7 @@ class Indenter {
         $first.AddLine($second.ToString())
         return $first
     }
-    static [Indenter]op_Addition([Indenter]$first, [System.Array]$second) {
+    static [Indenter]op_Addition([Indenter]$first, [Array]$second) {
         foreach ($item in $second) {
             $first += $item
         }
@@ -259,7 +260,7 @@ class HtmlCreator {
     # Usage: $html.CloseTag()
     CloseTag() {
         if ($this.Tags.Count -gt 0) {
-            $tag = $this.Tags[$this.Tags.Count - 1]
+            [string]$tag = $this.Tags[$this.Tags.Count - 1]
             $this.Tags.RemoveAt($this.Tags.Count - 1)
 
             $this.Body.DecreaseIndent()
@@ -351,7 +352,7 @@ class Image {
     SetInk([List[Ink]]$theInks) {
         $this.Inks = $theInks
 
-        $this.InkArea = 0;
+        $this.InkArea = 0
         foreach ($ink in $this.Inks.ToArray()) {
             $this.InkArea += $ink.Rect.GetArea()
         }
@@ -361,9 +362,9 @@ class Image {
     
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        [Indenter]$indenter = [Indenter]::new()
 
-        $imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to debug area proportions
+        [string]$imageDisplay = $this.Rect.ToString() # + " " + $this.InkArea + " " + $this.Rect.GetArea() uncomment to debug area proportions
         if ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
@@ -374,11 +375,11 @@ class Image {
             $indenter += [string]$this.Inks.Count + " inks:"
 
             # Ink print
-            $inkIndex = 1
+            [int]$inkIndex = 1
             $indenter.IncreaseIndent("|   ")
             foreach ($ink in $this.Inks) {
                 $indenter += [string]$inkIndex + ") " + $ink.ToString()
-                $inkIndex += 1
+                $inkIndex++
             }
             $indenter.DecreaseIndent()
         }
@@ -389,7 +390,7 @@ class Image {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
-        $imageDisplay = $this.Rect.ToString()
+        [string]$imageDisplay = $this.Rect.ToString()
         if ($this.HasWork) {
             $imageDisplay += " (!)(has work)"
         }
@@ -536,10 +537,10 @@ class Page {
     # Used by the constructor
     FetchImages([xml]$content) {
         foreach ($image in $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}) {
-            $theImage = [Image]::new($image)
+            [Image]$theImage = [Image]::new($image)
 
             # Get contained inks
-            $theInks = [List[Ink]]::new()
+            [List[Ink]]$theInks = [List[Ink]]::new()
             foreach ($ink in $this.Inks.ToArray()) {
                 if ($ink.Rect.Intersects($theImage.Rect)) {
                     $theInks.Add($ink)
@@ -567,9 +568,9 @@ class Page {
 
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        [Indenter]$indenter = [Indenter]::new()
 
-        $statusDisplay = $this.DateDisplay
+        [string]$statusDisplay = $this.DateDisplay
         if ($this.NeedsGrading) {
             $statusDisplay += " (!)(needs grading)"
         }
@@ -584,11 +585,11 @@ class Page {
         $indenter += $this.TagName, ([string]$this.Images.Count + " image(s):")
 
         # Image print
-        $imageIndex = 1
+        [int]$imageIndex = 1
         $indenter.IncreaseIndent("|   ")
         foreach ($image in $this.Images) {
             $indenter += [string]$imageIndex + ") " + $image.FullReport()
-            $imageIndex += 1
+            $imageIndex++
         }
         $indenter.DecreaseIndent()
 
@@ -696,10 +697,10 @@ class Section {
 
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        [Indenter]$indenter = [Indenter]::new()
         
         # Header print
-        $sectionDisplay = "# Section: " + $this.Name + " #"
+        [string]$sectionDisplay = "# Section: " + $this.Name + " #"
         if ($this.Deleted) {
             $sectionDisplay += " (deleted)"
         }
@@ -767,10 +768,10 @@ class SectionGroup {
 
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        [Indenter]$indenter = [Indenter]::new()
         
         # Header print
-        $sectionDisplay = "# SectionGroup: " + $this.Name + " #"
+        [string]$sectionDisplay = "# SectionGroup: " + $this.Name + " #"
         $indenter += $sectionDisplay
 
         # Section print
@@ -815,8 +816,6 @@ class Notebook {
 
     # Subjects which are assigned to this particular notebook
     [List[string]]$Subjects
-
-    [datetime]$prev
 
     # Constructor using the raw XML object
     # Usage: $notebook = [Notebook]::new($notebookXml)
@@ -908,7 +907,6 @@ class Notebook {
 
     # Missing assignment report
     [bool]HasAssignedPages($subject, $date) {
-        $this.prev = $date
         return $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject.ToLower() -eq $subject.ToLower()) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
     }
 
@@ -965,7 +963,7 @@ class Notebook {
     }
 
     [string]FullReport() {
-        $indenter = [Indenter]::new()
+        [Indenter]$indenter = [Indenter]::new()
 
         $indenter += " ", $this.Name, "-------------------"
         foreach ($sectiongroup in $this.SectionGroups) {
@@ -1096,7 +1094,7 @@ class Main {
             $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages"),      " ",
             $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages"), " "
 
-        $str = $indenter.Print()
+        [string]$str = $indenter.Print()
         Set-Content -Path ([Main]::Path + "STATUS REPORT.txt") -Value $str
         return $str
     }
@@ -1116,7 +1114,9 @@ class Main {
 
         foreach ($notebook in $this.Notebooks) {
             [List[Page]]$list = $func.Invoke($notebook)
-            if ($list -eq $null) { continue }
+            if ($list -eq $null) {
+                continue
+            }
 
             foreach ($page in $func.Invoke($notebook)) {
                 $html.AddTag("tr", "statusReportPageRow")
@@ -1144,12 +1144,12 @@ class Main {
     [string]MissingAssignmentReport() {
         [Indenter]$indenter = [Indenter]::new()
 
-        $sundayskip = 0
+        [int]$sundayskip = 0
         for([int]$i = 0; $i -lt [Main]::MissingAssignmentLookahead; $i++) {
             [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
             if ([DateHelper]::IsSameWeekday($date, "SUNDAY")) {
                 # No assignments on sundays: skip this day
-                $sundayskip += 1
+                $sundayskip++
                 $date = $date.AddDays(1)
             }
 
@@ -1167,7 +1167,7 @@ class Main {
             $indenter += " "
         }
         
-        $str = $indenter.Print()
+        [string]$str = $indenter.Print()
         Set-Content -Path ([Main]::Path + "MISSING ASSIGNMENT REPORT.txt") -Value $str
         return $str
     }
@@ -1177,14 +1177,14 @@ class Main {
 
         $html.AddTag("div", "missingAssignmentContainer")
 
-        $sundayskip = 0
+        [int]$sundayskip = 0
         for([int]$i = 0; $i -lt [Main]::MissingAssignmentLookahead; $i++) {
             $html.AddTag("div", "missingAssignmentDayContainer")
 
             [datetime]$date = [DateHelper]::Today.AddDays($i + $sundayskip)
             if ([DateHelper]::IsSameWeekday($date, "SUNDAY")) {
                 # No assignments on sundays: skip this day
-                $sundayskip += 1
+                $sundayskip++
                 $date = $date.AddDays(1)
             }
             
@@ -1222,11 +1222,11 @@ class Main {
     
     UploadHtml() {
         try {
-            $cred = Get-Content -Path "config.txt"
-            $ip = $cred[0]
-            $user = $cred[1]
-            $pass = $cred[2]
-            $onlinePath = $cred[3]
+            [Array]$cred = Get-Content -Path "config.txt"
+            [string]$ip = $cred[0]
+            [string]$user = $cred[1]
+            [string]$pass = $cred[2]
+            [string]$onlinePath = $cred[3]
 
             $sessionOptions = New-Object WinSCP.SessionOptions -Property @{
                 Protocol = [WinSCP.Protocol]::Ftp
