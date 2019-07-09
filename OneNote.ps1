@@ -1017,12 +1017,13 @@ class Main {
     static [int]$MissingAssignmentLookahead = 7
 
     [List[Notebook]]$Notebooks
+    [string]$LastUpdatedHtml
 
     Main() {
         # Init date helper class before use
         [DateHelper]::Init()
 
-        $this.Notebooks = [List[Notebook]]::new()
+        $this.SetLastUpdated()
 
         # Gets all OneNote things
         $onenote = New-Object -ComObject OneNote.Application
@@ -1030,6 +1031,23 @@ class Main {
         [xml]$hierarchy = ""
         $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
 
+        $this.Notebooks = [List[Notebook]]::new()
+        $this.FetchNotebooks($hierarchy)
+    }
+
+    SetLastUpdated() {
+        [HtmlCreator]$html = [HtmlCreator]::new()
+
+        [string]$dateStr = "Last updated " + (Get-Date -UFormat "%m/%d %I:%M %p")
+
+        $html.AddTag("div", "reportLastUpdated")
+        $html.AddElement("p", "reportLastUpdatedText", $dateStr)
+        $html.CloseTag()
+
+        $this.LastUpdatedHtml = $html.ToString()
+    }
+
+    FetchNotebooks([xml]$hierarchy) {
         foreach ($notebookXml in $hierarchy.Notebooks.Notebook) {
             # Exclude the admin notebook
             if ($notebookXml.Name.Contains("QuestLearning's")) {
@@ -1057,6 +1075,7 @@ class Main {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
         $html.AddTag("div", "fullReportContainer")
+        $html.AddText($this.LastUpdatedHtml)
         foreach ($notebook in $this.Notebooks) {
             $html.AddText($notebook.FullReportHtml())
             $html.AddBreak()
@@ -1102,6 +1121,9 @@ class Main {
     StatusReportHtml([Func[Notebook,List[Page]]]$func, [string]$name) {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
+        $html.AddTag("div", "statusReportContainer")
+        $html.AddText($this.LastUpdatedHtml)
+
         $html.AddTag("table", "statusReportTable")
         
         $html.AddTag("tr", "statusReportHeaderRow")
@@ -1129,6 +1151,7 @@ class Main {
             }
         }
 
+        $html.CloseTag()
         $html.CloseTag()
 
         Set-Content -Path ("Reports\Html\" + $name + ".html") -Value $html
@@ -1176,6 +1199,7 @@ class Main {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
         $html.AddTag("div", "missingAssignmentContainer")
+        $html.AddText($this.LastUpdatedHtml)
 
         [int]$sundayskip = 0
         for([int]$i = 0; $i -lt [Main]::MissingAssignmentLookahead; $i++) {
@@ -1243,7 +1267,10 @@ class Main {
                 $transferOptions = New-Object WinSCP.TransferOptions
                 $transferOptions.TransferMode = [WinSCP.TransferMode]::Binary
 
+                Write-Host "Uploading..."
+
                 # Add the new files
+                # Note that this takes a long time
                 $transferResult = $session.PutFiles((Get-Location).Path + "\Reports\Html", $onlinePath, $False, $transferOptions)
                 $transferResult.Check()
 
