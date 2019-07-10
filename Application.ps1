@@ -10,6 +10,9 @@
     Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
     Add-Type -Path "WinSCP/WinSCPnet.dll"
 }
+catch {
+    Write-Host "Error running: $($_.Exception.Message)"
+}
 finally {
     & ".\OneNote.ps1"
 }
