@@ -10,7 +10,7 @@
         Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser
     }
     catch {
-        Write-Host "Could not set execution policy: "
+        "Could not set execution policy: "
         $_
         Start-Sleep -s 3
     }
@@ -21,7 +21,7 @@
     & ".\OneNote.ps1"
 }
 catch {
-    Write-Host "Error running: "
+    "Error running: "
     $_
     Start-Sleep -s 15
 }

@@ -820,8 +820,6 @@ class Notebook {
     # Constructor using the raw XML object
     # Usage: $notebook = [Notebook]::new($notebookXml)
     Notebook([XmlElement]$notebook) {
-        Write-Host ("Processing " + $notebook.Name)
-
         $this.Name = $notebook.Name
         $this.Deleted = $notebook.IsInRecycleBin
 
@@ -1054,8 +1052,11 @@ class Main {
                 continue
             }
             
+            Write-Progress -Activity ("Loading " + $notebookXml.Name)
             $this.Notebooks.Add([Notebook]::new($notebookXml))
         }
+
+        Write-Progress -Activity "Done Loading" -Completed
     }
 
     [string]FullReport() {
@@ -1245,6 +1246,11 @@ class Main {
     
     
     UploadHtml() {
+        function FileTransferProgress($e) {
+            # Print progress
+            Write-Progress -Activity "Uploading $(Split-Path $e.FileName -leaf)" -PercentComplete $e.FileProgress
+        }
+
         try {
             [Array]$cred = Get-Content -Path "config.txt"
             [string]$ip = $cred[0]
@@ -1261,6 +1267,8 @@ class Main {
 
             $session = New-Object WinSCP.Session
 
+            $session.add_FileTransferProgress({ FileTransferProgress($_) })
+
             try {
                 $session.Open($sessionOptions)
 
@@ -1272,6 +1280,8 @@ class Main {
                 # Add the new files
                 # Note that this takes a long time
                 $transferResult = $session.PutFiles((Get-Location).Path + "\Reports\Html", $onlinePath, $False, $transferOptions)
+
+                Write-Host " "
                 $transferResult.Check()
 
                 foreach ($transfer in $transferResult.Transfers)
@@ -1287,6 +1297,8 @@ class Main {
             Write-Host "Error uploading: $($_.Exception.Message)"
         }
     }
+
+
 }
 
 
