@@ -1,4 +1,6 @@
-﻿try {
+﻿[bool]$didWork = $false
+
+try {
     if ($PSScriptRoot -ne $null) {
         cd $PSScriptRoot
     } else {
@@ -18,10 +20,15 @@
     Add-Type -AssemblyName Microsoft.Office.Interop.OneNote
     Add-Type -Path "WinSCP/WinSCPnet.dll"
 
-    & ".\OneNote.ps1"
+    $didWork = $true
 }
 catch {
     "Error running: "
     $_
     Start-Sleep -s 15
+}
+
+
+if ($didWork) {
+    & ".\OneNote.ps1"
 }
