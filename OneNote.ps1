@@ -536,7 +536,7 @@ class Page {
     # Searches for image items in the content
     # Used by the constructor
     FetchImages([xml]$content) {
-        foreach ($image in $content.GetElementsByTagName("one:Image").Where{!($_.Position -eq $null)}) {
+        foreach ($image in $content.GetElementsByTagName("one:Image").Where{$_.Position -ne $null}) {
             [Image]$theImage = [Image]::new($image)
 
             # Get contained inks
