@@ -330,6 +330,9 @@ class Image {
     # The ink area to image area ratio which must be met for the work to be considered substantial
     static [float] $pageFillConstant = 0.005
     
+    # The amount of inks which must be on the image to qualify as grade-able work
+    static [int] $minimumInks = 5
+
 
     # The box which the image occupies
     [Rectangle]$Rect
@@ -352,7 +355,7 @@ class Image {
     SetInk([List[Ink]]$theInks) {
         $this.Inks = $theInks
 
-        if ($this.Inks.Count -lt 5) {
+        if ($this.Inks.Count -lt [Image]::minimumInks) {
             $this.HasWork = $false
         }
         else {
