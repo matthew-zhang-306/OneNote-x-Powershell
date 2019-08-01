@@ -352,15 +352,20 @@ class Image {
     SetInk([List[Ink]]$theInks) {
         $this.Inks = $theInks
 
-        $this.InkArea = 0
-        foreach ($ink in $this.Inks.ToArray()) {
-            $this.InkArea += $ink.Rect.GetArea()
+        if ($this.Inks.Count -lt 5) {
+            $this.HasWork = $false
         }
+        else {
+            $this.InkArea = 0
+            foreach ($ink in $this.Inks.ToArray()) {
+                $this.InkArea += $ink.Rect.GetArea()
+            }
 
-        $this.HasWork = $this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant
+            $this.HasWork = $this.InkArea -ge $this.Rect.GetArea() * [Image]::pageFillConstant
+        }
     }
     
-
+        
     [string]FullReport() {
         [Indenter]$indenter = [Indenter]::new()
 
@@ -1110,6 +1115,7 @@ class Main {
 
         $indenter +=
             $this.StatusReport({param([Notebook]$n) $n.GetUngradedPages()},   "ungraded pages"),   " ",
+           
             $this.StatusReport({param([Notebook]$n) $n.GetInactivePages()},   "inactive pages"),   " ",
             $this.StatusReport({param([Notebook]$n) $n.GetEmptyPages()},      "empty pages"),      " ",
             $this.StatusReport({param([Notebook]$n) $n.GetUnreviewedPages()}, "unreviewed pages"), " "
