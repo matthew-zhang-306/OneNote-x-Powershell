@@ -78,7 +78,7 @@ class DateHelper {
     }
     
     # The current time
-    static [datetime]$Now = (Get-Date -Year 2019 -Month 6 -Day 13) # Comment out parameters to use the current date and not a debug time
+    static [datetime]$Now = (Get-Date)# -Year 2019 -Month 6 -Day 13) # Comment out parameters to use the current date and not a debug time
     
     # The current date
     static [datetime]$Today = [DateHelper]::Now.Date
