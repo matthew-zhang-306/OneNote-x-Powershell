@@ -912,7 +912,7 @@ class Notebook {
     }
 
     # Missing assignment report
-    [bool]HasAssignedPages($subject, $date) {
+    [bool]HasAssignedPages([string]$subject, [datetime]$date) {
         return $this.HasPagesWhere({param([Page]$p) (-not $p.Empty) -and ($p.Subject.ToLower() -eq $subject.ToLower()) -and ([DateHelper]::IsSameDay($p.OriginalAssignmentDate, $date))})
     }
 
