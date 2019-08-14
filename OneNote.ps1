@@ -403,7 +403,7 @@ class Image {
             $imageDisplay += " (!)(has work)"
         }
 
-        $html.AddElement("p", "fullReportImageSubheader", [string]$this.Inks.Count + " mark(s)")
+        #$html.AddElement("p", "fullReportImageSubheader", [string]$this.Inks.Count + " mark(s)")
 
         return $html.ToString()
     }
@@ -608,20 +608,31 @@ class Page {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
-        $html.AddElement("p", "fullReportPageHeader", $this.Name)
+        #Reports no book if book is empty
+        if($this.Empty){
+            #May add a note here later
+            $html.AddElement("div", "fullReportPageItem", "Book is empty.")
+        }
+        #Adds date to book title
+        else {
+            $html.AddElement("p", "fullReportPageItem", $this.Name + " (modified on " + $this.DateDisplay + ")")
+        }
+        
 
         $html.AddTag("ul", "fullReportPageInfoList")
 
-        $html.AddElement("li", "fullReportPageInfoDateItem", $this.DateDisplay)
-        if ($this.TagName -ne [Page]::DefaultTagName) {
-            $html.AddElement("li", "fullReportPageInfoTagItem", $this.TagName)
+        #$html.AddElement("li", "fullReportPageInfoDateItem", $this.DateDisplay)
+
+        #Only shows tags on non-empty pages
+        if ($this.TagName -ne [Page]::DefaultTagName -and !$this.Empty) {
+            $html.AddElement("li", "fullReportPageInfoTagItem", "Tagged as '" + $this.TagName + "'")
         }
 
-        $html.AddTag("li", "fullReportPageInfoImageCountItem")
-        $html.AddText("Pages:")
+        #$html.AddTag("li", "fullReportPageInfoImageCountItem")
+        #$html.AddText("Pages:")
         $html.AddTag("ol", "fullReportImageList")
         foreach ($image in $this.Images) {
-            $html.AddElement("li", "fullReportImageItem", $image.FullReportHtml())
+            #$html.AddElement("li", "fullReportImageItem", $image.FullReportHtml())
         }
         $html.CloseTag()
         $html.CloseTag()
@@ -652,6 +663,9 @@ class Section {
     # Parent objects
     [SectionGroup]$SectionGroup
     [Notebook]$Notebook
+
+    # Page counter
+    [int32]$PageCounter = 0
 
     # Constructor using the raw XML object and the parent object
     # Use the $sectiongroup version unless there is no parent section group
@@ -726,11 +740,31 @@ class Section {
 
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
-
-        $html.AddElement("p", "fullReportSectionHeader", $this.Name)
-        foreach ($page in $this.Pages) {
-            $html.AddElement("div", "fullReportPageItem", $page.FullReportHtml())
+            
+        if ($this.Name -eq "Corrections") {
+            $html.AddElement("p", "fullReportSectionHeader", "Has corrections:")
         }
+        else {
+            $html.AddElement("p", "fullReportSectionHeader", $this.Name + " book(s):")
+        }
+       
+        foreach ($page in $this.Pages) {
+            $this.PageCounter +=1
+            $html.AddElement("div", "fullReportPageItem", $page.FullReportHtml())            
+        }
+
+
+        if ($this.PageCounter -eq 0)
+        {
+            $html.AddElement("div", "fullReportPageItem", "N/A.")
+        }
+
+        #doesn't work yet
+        elseif ($this.PageCounter -eq 0 -and $page.Name -eq "Corrections")
+        {
+            $html.AddElement("div", "fullReportPageItem", "No.")
+        }
+
 
         return $html.ToString()
     }
@@ -995,7 +1029,7 @@ class Notebook {
         }
         $html.CloseTag()
 
-        $html.AddTag("tr", "fullReportSectionGrouopRow")
+        $html.AddTag("tr", "fullReportSectionGroupRow")
         foreach ($sectiongroup in $this.SectionGroups) {
             $html.AddElement("td", "fullReportSectionGroupCellItem", $sectiongroup.FullReportHtml())
         }
@@ -1326,7 +1360,7 @@ Function Main() {
     $main.MissingAssignmentReportHtml()
     " "
     " "
-    $main.UploadHtml()
+    #$main.UploadHtml()
 }
 
 Main
