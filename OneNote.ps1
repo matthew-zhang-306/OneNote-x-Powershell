@@ -6,7 +6,7 @@ using namespace System.Xml
 # Everything is back in one file again because Powershell really dislikes classes being in separate files.
 
 
-cls
+Clear-Host
 
 <#
 RECTANGLE CLASS

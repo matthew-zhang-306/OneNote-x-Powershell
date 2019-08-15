@@ -1,11 +1,10 @@
 ﻿using namespace Microsoft.Office.Interop
 using namespace System.Xml
 
-cls
+Clear-Host
 
 try {
     $onenote = New-Object -ComObject OneNote.Application
-    $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
     [xml]$hierarchy = ""
     $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
 
