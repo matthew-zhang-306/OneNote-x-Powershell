@@ -2,9 +2,9 @@
 
 try {
     if ($PSScriptRoot -ne $null) {
-        cd $PSScriptRoot
+        Set-Location $PSScriptRoot
     } else {
-        cd $psISE.CurrentFile.FullPath.Replace("\Application.ps1","")
+        Set-Location $psISE.CurrentFile.FullPath.Replace("\Application.ps1","")
     }
 
     # Execution policy might not work because of the "more specific scope" error so this try/catch block works around it
