@@ -1018,7 +1018,6 @@ Contains the main report generating functionality of the script
 #>
 class Main {
     static [string]$Path = "Reports\"
-    static [string]$Style
 
     static [int]$MissingAssignmentLookahead = 7
 
@@ -1033,7 +1032,6 @@ class Main {
 
         # Gets all OneNote things
         $onenote = New-Object -ComObject OneNote.Application
-        $schema = @{one=”http://schemas.microsoft.com/office/onenote/2013/onenote”}
         [xml]$hierarchy = ""
         $onenote.GetHierarchy("", [OneNote.HierarchyScope]::hsPages, [ref]$hierarchy)
 
