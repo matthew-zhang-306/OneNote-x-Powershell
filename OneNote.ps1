@@ -398,11 +398,6 @@ class Image {
     [string]FullReportHtml() {
         [HtmlCreator]$html = [HtmlCreator]::new()
 
-        [string]$imageDisplay = $this.Rect.ToString()
-        if ($this.HasWork) {
-            $imageDisplay += " (!)(has work)"
-        }
-
         $html.AddElement("p", "fullReportImageSubheader", [string]$this.Inks.Count + " mark(s)")
 
         return $html.ToString()
@@ -995,7 +990,7 @@ class Notebook {
         }
         $html.CloseTag()
 
-        $html.AddTag("tr", "fullReportSectionGrouopRow")
+        $html.AddTag("tr", "fullReportSectionGroupRow")
         foreach ($sectiongroup in $this.SectionGroups) {
             $html.AddElement("td", "fullReportSectionGroupCellItem", $sectiongroup.FullReportHtml())
         }
